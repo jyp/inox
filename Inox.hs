@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Inox where
@@ -6,7 +7,7 @@ import qualified Data.Map.Strict as Map
 import qualified Control.Monad.State as MS
 import Control.Monad
 import Control.Monad.Trans.Class
-import Text.PrettyPrint.Compact
+import Text.PrettyPrint.Compact hiding (Dual)
 -- import Text.PrettyPrint.Compact.Core
 import Data.String (IsString(..))
 
@@ -14,8 +15,10 @@ data PositiveType
     = PositiveType :*: PositiveType
     | One
     | Shift NegativeType
+  deriving (Eq)
 
 newtype NegativeType = Dual PositiveType
+  deriving (Eq)
 
 newtype Variable = Variable String
   deriving (Eq,Ord)
@@ -82,12 +85,13 @@ data Closure -- ^ value
 type Environment = Map.Map Variable Closure
 
 -- | Helper to perform closing
-run' :: Environment -> Command -> State
-run' e (Command v c) = Run e' clo c
+run' :: Environment -> Command -> Maybe State
+run' e (Command v c) = Just $ Run e' clo c
   where (clo,e') = MS.runState (close v) e
+run' _ Done = Nothing
 
 -- | Abstract Machine
-run :: State -> State
+run :: State -> Maybe State
 run (Run e CUnit (LetUnit c)) = run' e c
 run (Run e (CPair a b) (LetPair x y c)) = run' (Map.insert x a $ Map.insert y b e) c
 run (Run e (ClosedComputation e' x c) (ForceWith u)) =
@@ -106,11 +110,6 @@ close (Id x) = do
   MS.put $ Map.delete x e
   let (Just v) = Map.lookup x e
   return v
-close (LetForce gamma x c) = do
-  e <- MS.get
-  let e' = Map.intersectionWith (\a _ -> a) e gamma
-  MS.put $ Map.difference e gamma
-  return $ ClosedComputation e' x c
 close (LetForce gamma x c) = do
   e <- MS.get
   let e' = Map.intersectionWith (\a _ -> a) e gamma
@@ -153,14 +152,15 @@ checkType (CC x c) gamma (Dual t) =
   where gamma' =
           Map.insert x t $
           gamma
-checkType (ForceWith u) gamma (Dual (Shift t)) =
-    t' <- inferType gamma u
+checkType (ForceWith u) gamma (Dual (Shift (Dual t))) = do
+    t' <- inferType u gamma
     guard $ subtype t' t
+checkType _ _ _ = Nothing
 
 check :: Command -> Context -> Maybe ()
-check (Command v n) gamma =
+check (Command v n) gamma = do
   (t,gamma') <- MS.runStateT (inferTypeCtx v) gamma
-  checkType n gamma (Dual t)
+  checkType n gamma' (Dual t)
 check Done gamma =
   guard $ Map.null gamma
 
