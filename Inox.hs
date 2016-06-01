@@ -47,7 +47,7 @@ instance Pretty Command where
 
 instance Pretty Computation where
   pretty (LetPair x y c) = "let (" <> pretty x <> "," <> pretty y <> ") = . in" $$ pretty c
-  pretty (LetUnit c) = "let () = . in" <> pretty c
+  pretty (LetUnit c) = "let () = . in" $$ pretty c
   pretty (ForceWith v) = "force " <> pretty v
   pretty (CC x c) = "let " <> pretty x <> " = . in" $$ pretty c
   -- pretty ()
