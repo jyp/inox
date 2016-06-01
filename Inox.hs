@@ -7,7 +7,7 @@ import qualified Control.Monad.State as MS
 import Control.Monad
 import Control.Monad.Trans.Class
 import Text.PrettyPrint.Compact
-import Text.PrettyPrint.Compact.Core
+-- import Text.PrettyPrint.Compact.Core
 import Data.String (IsString(..))
 
 data PositiveType
@@ -29,19 +29,13 @@ data Value -- positive terms
 class Pretty x where
   pretty :: x -> Doc
 
-(</>) :: Doc -> Doc -> Doc
-a </> b = (a <> b) <|> (a $$ b)
-
-instance IsString Doc where
-  fromString = text
-
 instance Pretty Variable where
   pretty (Variable x) = text x
 
 instance Pretty Value where
   pretty (Pair x y) = parens (pretty x <> text "," </> pretty y)
   pretty Unit = text "()"
-  pretty (LetForce _gamma x c) = "let force/" <> pretty x <> " " </> pretty c
+  pretty (LetForce _gamma x c) = "let force/" <> pretty x <> " in" $$ pretty c
   pretty (Id x) = pretty x
 instance Pretty Command where
   pretty (Command v c) = "⟨" <> pretty v <> " | " <> pretty c <> "⟩"

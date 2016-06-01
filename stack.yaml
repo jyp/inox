@@ -6,6 +6,9 @@ resolver: lts-6.1
 # Local packages, usually specified by relative directory name
 packages:
 - '.'
+- location:
+    git: https://github.com/jyp/prettiest.git
+    commit: 60a8cb0ac38fd35fd38d75b17215f04e4240c645
 
 # Packages to be pulled from upstream that are not in the resolver (e.g., acme-missiles-0.3)
 extra-deps:
