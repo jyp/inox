@@ -1,9 +1,70 @@
+* Syntax
 
-| Type  | Intro | Elim                |
-|-------+-------+---------------------|
-| A ⊗ B | letxs | let (x,y) = .z in a |
-| 1     |       |                     |
-| ~A    |       |                     |
-|       |       |                     |
+Summary: single-sided polarised sequent calculus.
+
+| Type  | Intro                | Elim               | Notes                                                                          |
+|-------+----------------------+--------------------+--------------------------------------------------------------------------------|
+| A ⊗ B | (u,v)                | let (x,y) = . in c |                                                                                |
+| 1     | ()                   | let () = . in c    |                                                                                |
+| ~A    |                      |                    | typiquement je voudrais comprendre ce type comme A ⊸ ⊥                         |
+| ↓~A   | let force/x = . in c | force/u            | À vérifier ; there is a more symmetric alternative in term of commands instead |
 
 
+** Static semantics
+
+*** Multiplicatives
+
+Γ⊢u:A     Δ⊢v:B
+----------------
+Γ,Δ⊢(u,v) : A⊗B
+
+---
+⊢ 1
+
+        Γ,x:A,y:B ⊢ c
+---------------------------------
+Γ ⊢ let (x,y))= . in c : ~(A⊗B)
+
+       Γ ⊢ c
+-------------------------
+Γ ⊢ let () = . in c : ~1
+
+*** Closures/Shift
+
+         Γ,x:A ⊢ c
+-------------------------------
+Γ ⊢ let force/x = . in c : ↓~A
+
+
+    Γ ⊢ u : A
+----------------------
+Γ ⊢ force/u : ~↓~A
+
+*** Interaction
+
+---------- (id)
+x:A ⊢ x:A
+
+  Γ⊢u:A   Δ⊢a:~A
+---------------------- (cut)
+  Γ,Δ ⊢ ⟨ u | a ⟩
+
+     Γ,x:A ⊢ c
+------------------------ (cc)
+Γ ⊢ let x = . in c : ~A
+
+** TODO exponentials
+
+* Reduction semantics
+
+⟨ () | let () = . in c ⟩ ⟶ c
+⟨ (u,v) | let (x,y) = . in c ⟩ ⟶ c[x\u, y\v]
+⟨ let force/x = . in c | force/u ⟩ ⟶ c[x\u]
+
+* VM
+
+{E;⟨ () | let () = . in c ⟩}           --->  {E;c}
+{E;⟨ (u,v) | let (x,y) = . in c ⟩}     --->  {E,x\u,y\v;c}
+{E;⟨ let force/x = . in c | force/u ⟩} --->  {E,x\u;c}
+{E;⟨ x | k ⟩}                          --->  {E\x;⟨ E[x] | k ⟩}
+{E;⟨ u | let x = . in c ⟩}             --->  {E,x\u;c}
