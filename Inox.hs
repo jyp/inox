@@ -1,7 +1,12 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Inox where
 
 import qualified Data.Map.Strict as Map
 import qualified Control.Monad.State as MS
+import Text.PrettyPrint.Compact
+import Text.PrettyPrint.Compact.Core
+import Data.String (IsString(..))
 
 data PositiveType
     = PositiveType :*: PositiveType
@@ -10,7 +15,7 @@ data PositiveType
 
 newtype NegativeType = Dual PositiveType
 
-newtype Variable = Variable Integer -- ?? We could use strings for ease of read.
+newtype Variable = Variable String
   deriving (Eq,Ord)
 
 data Value -- positive terms
@@ -19,6 +24,35 @@ data Value -- positive terms
     | LetForce (Map.Map Variable ()) Variable Command
     | Id Variable
 
+class Pretty x where
+  pretty :: x -> Doc
+
+(</>) :: Doc -> Doc -> Doc
+a </> b = (a <> b) <|> (a $$ b)
+
+instance IsString Doc where
+  fromString = text
+
+instance Pretty Variable where
+  pretty (Variable x) = text x
+
+instance Pretty Value where
+  pretty (Pair x y) = parens (pretty x <> text "," </> pretty y)
+  pretty Unit = text "()"
+  pretty (LetForce _gamma x c) = "let force/" <> pretty x <> " " </> pretty c
+  pretty (Id x) = pretty x
+instance Pretty Command where
+  pretty (Command v c) = "⟨" <> pretty v <> " | " <> pretty c <> "⟩"
+  pretty (Done) = "done!"
+
+instance Pretty Computation where
+  pretty (LetPair x y c) = "let (" <> pretty x <> "," <> pretty y <> ") = . in" $$ pretty c
+  pretty (LetUnit c) = "let () = . in" <> pretty c
+  pretty (ForceWith v) = "force " <> pretty v
+  pretty (CC x c) = "let " <> pretty x <> " = . in" $$ pretty c
+  -- pretty ()
+
+
 data Computation -- negative terms
    = LetPair Variable Variable Command
    | LetUnit Command
@@ -26,7 +60,7 @@ data Computation -- negative terms
    | CC Variable Command
 
 
-data Command = Command Value Computation
+data Command = Command Value Computation | Done
 
 subst :: Variable -> Value -> Command -> Command
 subst _x _v _c = error "subst: TODO"
