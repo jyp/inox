@@ -81,3 +81,8 @@ close (LetForce gamma x c) = do
   let e' = Map.intersectionWith (\a _ -> a) e gamma
   MS.put $ Map.difference e gamma
   return $ ClosedComputation e' x c
+close (LetForce gamma x c) = do
+  e <- MS.get
+  let e' = Map.intersectionWith (\a _ -> a) e gamma
+  MS.put $ Map.difference e gamma
+  return $ ClosedComputation e' x c
