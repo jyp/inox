@@ -4,6 +4,8 @@ module Inox where
 
 import qualified Data.Map.Strict as Map
 import qualified Control.Monad.State as MS
+import Control.Monad
+import Control.Monad.Trans.Class
 import Text.PrettyPrint.Compact
 import Text.PrettyPrint.Compact.Core
 import Data.String (IsString(..))
@@ -120,3 +122,25 @@ close (LetForce gamma x c) = do
   let e' = Map.intersectionWith (\a _ -> a) e gamma
   MS.put $ Map.difference e gamma
   return $ ClosedComputation e' x c
+
+type Context = Map.Map Variable PositiveType
+
+inferTypeCtx :: Value -> MS.StateT Context Maybe PositiveType
+inferTypeCtx Unit = do
+  return One
+inferTypeCtx (Pair a b) = do
+  ta <- inferTypeCtx a
+  tb <- inferTypeCtx b
+  return $ ta :*: tb
+inferTypeCtx (Id x) = do
+  gamma <- MS.get
+  t <- lift $ Map.lookup x gamma
+  MS.put $ Map.delete x gamma
+  return t
+inferTypeCtx (LetForce _gamma _x _c) = error "inferTypeCtx: TODO"
+
+inferType :: Value -> Context -> Maybe PositiveType
+inferType v gamma = do
+  (t,leftover_gamma) <- MS.runStateT (inferTypeCtx v) gamma
+  guard $ Map.null leftover_gamma
+  return t
