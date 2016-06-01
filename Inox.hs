@@ -26,7 +26,7 @@ newtype Variable = Variable String
 data Value -- positive terms
     = Pair Value Value
     | Unit
-    | LetForce (Map.Map Variable ()) Variable Command
+    | LetForce PositiveType (Map.Map Variable ()) Variable Command
     | Id Variable
 
 class Pretty x where
@@ -38,7 +38,7 @@ instance Pretty Variable where
 instance Pretty Value where
   pretty (Pair x y) = parens (pretty x <> text "," </> pretty y)
   pretty Unit = text "()"
-  pretty (LetForce _gamma x c) = "let force/" <> pretty x <> " in" $$ pretty c
+  pretty (LetForce _t _gamma x c) = "let force/" <> pretty x <> " in" $$ pretty c
   pretty (Id x) = pretty x
 instance Pretty Command where
   pretty (Command v c) = "⟨" <> pretty v <> " | " <> pretty c <> "⟩"
@@ -67,7 +67,7 @@ subst _x _v _c = error "subst: TODO"
 reduce :: Command -> Command
 reduce (Command Unit (LetUnit c)) = c
 reduce (Command (Pair a b) (LetPair x y c)) = subst x a $ subst y b $ c
-reduce (Command (LetForce _gamma x c) (ForceWith a)) = subst x a c
+reduce (Command (LetForce _t _gamma x c) (ForceWith a)) = subst x a c
 reduce (Command a (CC x c)) = subst x a c
 reduce _ = error "reduce: ill-typed"
 
@@ -110,7 +110,7 @@ close (Id x) = do
   MS.put $ Map.delete x e
   let (Just v) = Map.lookup x e
   return v
-close (LetForce gamma x c) = do
+close (LetForce _t gamma x c) = do
   e <- MS.get
   let e' = Map.intersectionWith (\a _ -> a) e gamma
   MS.put $ Map.difference e gamma
@@ -130,7 +130,7 @@ inferTypeCtx (Id x) = do
   t <- lift $ Map.lookup x gamma
   MS.put $ Map.delete x gamma
   return t
-inferTypeCtx (LetForce _gamma _x _c) = error "inferTypeCtx: TODO"
+inferTypeCtx (LetForce t _gamma _x _c) = return t
 
 inferType :: Value -> Context -> Maybe PositiveType
 inferType v gamma = do
