@@ -144,3 +144,31 @@ inferType v gamma = do
   (t,leftover_gamma) <- MS.runStateT (inferTypeCtx v) gamma
   guard $ Map.null leftover_gamma
   return t
+
+checkType :: Computation -> Context -> NegativeType -> Maybe ()
+checkType (LetPair x y c) gamma (Dual (ta :*: tb)) =
+    check c gamma'
+  where gamma' =
+          Map.insert x ta $
+          Map.insert y tb $
+          gamma
+checkType (LetUnit c) gamma (Dual One) =
+    check c gamma
+checkType (CC x c) gamma (Dual t) =
+    check c gamma'
+  where gamma' =
+          Map.insert x t $
+          gamma
+checkType (ForceWith u) gamma (Dual (Shift t)) =
+    t' <- inferType gamma u
+    guard $ subtype t' t
+
+check :: Command -> Context -> Maybe ()
+check (Command v n) gamma =
+  (t,gamma') <- MS.runStateT (inferTypeCtx v) gamma
+  checkType n gamma (Dual t)
+check Done gamma =
+  guard $ Map.null gamma
+
+subtype :: PositiveType -> PositiveType -> Bool
+subtype = (==)
