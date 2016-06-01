@@ -1,0 +1,143 @@
+
+* Issues
+** How to decide if a function call should be inlined or not? 
+
+All top-level functions are in principle inlinable. It is a good
+idea to always inline them?
+
+** Recursion
+
+Recursion is annoying, because we have to do "supercompilation"
+instead of the usual cut-elimination.
+
+My preferred solution is to not eliminate recursion. Recursion will
+thus correspond to allocation of data structures and/or loops.
+
+*** How to represent lists? Other data structures?
+
+One approach is to have both the mu and nu representation and have a
+primitives which do the conversion. In one direction we get a loop, in
+the other direction we get data allocation.
+
+ListF a x = 1 ⊕ (a ⊗ x)
+
+μList a = μ ListF
+        = ∀x. (ListF a x → x) → x
+
+νList a = ν ListF
+        = ∃x. x ⊗ !(x ⊸ ListF a x)
+
+
+** Syntax for data
+data List α where
+  Nil : List α
+  Cons : α ⊗ List α -> List α
+
+List = \α -> data Nil
+                | Cons (x : α^1) (xs : Ptr (List α))
+
+
+** Runtime type representation
+
+⊥ is a pointer in the code. It can be eliminated (yield) by jumping to
+it.
+
+A ⊸ ⊥ is a pointer to the code, but eliminating it requires A to be
+pushed on the stack first.
+
+Conveniently, A ⊸ (B ⊸ ⊥) may have the same representation as A ⊗ B ⊸
+⊥
+
+What about !⊥ ? The problem is then that we have to create a closure.
+An alternate reading is that the "closure" should be partially
+evaluated. Then there just remains a bit of code to jump to. BUT:
+partially evaluating requires to have a runtime representation of the
+code which can be manipulated (AST, ...).
+
+** Elimination of higher-order calls.
+
+Consider:
+
+filter :: (a ⊸ Maybe a) → [a] ⊸ [a]
+filter p [] = []
+filter p (x:xs) = case p x of
+   Just x' -> x':filter p xs
+   Nothing -> filter p xs
+
+
+filter :: (a ⊸ (Maybe a ⊸ ⊥) ⊸ ⊥) → [a] ⊸ ([a] ⊸ ⊥) ⊸ ⊥
+filter p [] k = k []
+filter p (x:xs) k = p $ \r -> case r of
+   Just x' -> filter p xs $ \xs' -> k (x':xs')
+   Nothing -> filter p xs k
+
+
+
+in filter (\x -> x < 5) we'd like to eliminate the cut. A-priori an
+exponential cut cannot be removed. Heuristic to do it anyway? Perhaps
+when the argument is fully known?
+
+In this case the number of calls to the predicate is bounded by the
+length of the list. So it's safe to inline. Perhaps have a separate
+eliminable exponential:
+
+filter :: (a ⊸ Maybe a) ⇒ [a] ⊸ [a]
+
+Or a dependent linear type (like an n-ary tensor).
+
+** Syntax for function types
+
+n (x : A) -> B
+n {x : A} -> B
+
+
+A -o B
+Pi (x : A) -> B
+
+
+(α : *) -> α ⊸ α
+
+What about using gcc closures? But then we have to make sure that they
+do not escape, which is annoying when there are exponentials in the
+mix. (Is that true? Can they escape? Maybe only when there are data
+structures?)
+
+
+** Classical vs Intuitionistic
+
+CLL can be recovered with:
+
+unDN :: ((A ⊸ ⊥) ⊸ ⊥) ⊸ A
+
+This IS useful sometimes.
+ -
+** Binding C
+
+We'd like to get little (no) marshalling
+
+* Example of Par.
+
+We had this example for par.
+
+create :: G
+dispose :: ~G
+next :: G ⊸ Int ⊗ G
+split :: G ⊸ G ⅋ G
+
+
+It's kinda ridiculous though. We might just as well encode split as:
+
+split :: G ⊸ (G ⊸ ⊥) ⊸ (G ⊸ ⊥) ⊸ ⊥
+
+We don't lose much, as the programs in classical style have to be
+written in CPS-style anyway.
+
+* Example for lists
+
+MuList a = ∀a. a ⊸ (a ⊸ a ⊸ a) → a ⊸ a
+NuList a = ∃a. a ⊗ !(a ⊸ 1 ⊕ a)
+
+filterMu :: (a -> Maybe b) -> MuList a -> MuList b
+filterMu p phi = \nil cons -> phi nil (\x xs -> case p x of
+                                           Nothing -> xs
+                                           Just y -> cons y xs)
