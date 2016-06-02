@@ -8,7 +8,7 @@ LetUnit   . Computation ::= "let" "()" "=" "." "in" Command ;
 ForceWith . Computation ::= "force" "/" Value ;
 CC        . Computation ::= "let" Variable "=" "." "in" Command ;
 
-Command . Command ::= "<" Value "|" Computation ">" ;
+Com . Command ::= "<" Value "|" Computation ">" ;
 Done    . Command ::= "Done" ;
 
 Tensor . PositiveType ::= PositiveType "<*>" PositiveType ;
@@ -17,7 +17,7 @@ Shift  . PositiveType ::= "V" NegativeType ;
 
 Dual . NegativeType ::= "~" PositiveType ;
 
-Variable . Variable ::= Ident ;
+Var . Variable ::= Ident ;
 
 []  . [Variable] ::= ;
 (:) . [Variable] ::= Variable [Variable] ;
