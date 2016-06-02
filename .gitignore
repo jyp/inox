@@ -1,1 +1,10 @@
+# emacs
 *~
+
+# stack
+.stack-work
+
+# bnfc
+Bnf/*
+!Bnf/*.cf
+!Bnf/README.org
