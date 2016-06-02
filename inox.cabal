@@ -5,6 +5,7 @@ synopsis:       A language with linear types
 description:
   Soon to appear.
 license:        GPL
+license-file:   LICENSE
 author:         Jean-Philippe Bernardy and Arnaud Spiwack
 maintainer:     jeanphilippe.bernardy@gmail.com
 Cabal-Version:  >= 1.12
