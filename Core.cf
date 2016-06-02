@@ -1,0 +1,23 @@
+Pair     . Value ::= "(" Value "," Value ")" ;
+Unit     . Value ::= "()" ;
+LetForce . Value ::= "let" "[" [Variable] "]" "force" "/" Variable ":" PositiveType "in" Command ;
+Id       . Value ::= Variable ;
+
+LetPair   . Computation ::= "let" "(" Variable "," Variable ")" "=" "." "in" Command ;
+LetUnit   . Computation ::= "let" "()" "=" "." "in" Command ;
+ForceWith . Computation ::= "force" "/" Value ;
+CC        . Computation ::= "let" Variable "=" "." "in" Command ;
+
+Command . Command ::= "<" Value "|" Computation ">" ;
+Done    . Command ::= "Done" ;
+
+Tensor . PositiveType ::= PositiveType "<*>" PositiveType ;
+One    . PositiveType ::= "1" ;
+Shift  . PositiveType ::= "V" NegativeType ;
+
+Dual . NegativeType ::= "~" PositiveType ;
+
+Variable . Variable ::= Ident ;
+
+[]  . [Variable] ::= ;
+(:) . [Variable] ::= Variable [Variable] ;
