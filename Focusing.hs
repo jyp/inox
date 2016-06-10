@@ -80,7 +80,7 @@ data Pos r where
   VTensor :: Val r -> Val r -> Pos r
   VPlus :: Bool -> Val r -> Pos r
   VOne  :: Pos r
-  VAtom :: String -> (String -> r) -> Pos r
+  VAtom :: String -> Pos r
   -- for type variables and builtin atoms.
  deriving Show
 
@@ -101,7 +101,7 @@ data Val r where
 freeVars :: Val r -> ([String] -> r) -> r
 freeVars (N _) k = k []
 freeVars (S nn) k = nn $ \p -> case p of
-  VAtom x _ -> k [x]
+  VAtom x -> k [x]
   VExist _ v -> freeVars v k
   VTensor a b -> freeVars a $ \a' -> freeVars b $ \b' -> k (a' <> b')
   VPlus _ a -> freeVars a k
@@ -186,8 +186,9 @@ coeval env t = case t of
 -- toVal :: (n ~ String, r ~ LL n n) => n -> Type -> Val r
 -- | Top-level conversion. Pattern-match on the type and reify as appropriate.
 -- toVal :: forall r n. Reifier n r => n -> Type -> Val r
+toVal x (Perp (Var t)) = Neg $ \a -> coreify x_arg (Perp (Var t)) (Pos a) <> "CALL(" <> x <> "," <> x_arg <> ");\n"
+  where x_arg = fresh x "arg"
 toVal x (Perp t) = Neg $ \a -> coreify x (Perp t) (Pos a)
-toVal x (Var t) = Pos $ VAtom x (atom (Var t) x)
   -- small quirk: if we don't have this then all the atoms coming from the
   -- environment will be considered double-negatively.
 toVal x t = Shift $ \k -> reify x t $ \(P a) -> k a
@@ -199,8 +200,6 @@ class Reifier n r where
   reify :: n -> Type -> (Val r -> r) -> r
   -- | Dual
   coreify :: n -> Type -> Val r -> r
-  -- | Atom
-  atom :: Type -> n -> n -> r
 
 fresh :: String -> String -> String
 fresh nm suff = nm ++ "_" ++ suff
@@ -217,7 +216,7 @@ instance Reifier String (LL String String) where
     Ex t -> Exist x nt nx $ reify nx (t $ Var nt) (kp . VExist (Var nt))
     I -> One x $ kp VOne
     O -> Zero x
-    Var _ -> kp (VAtom x $ Ax x)
+    Var _ -> kp (VAtom x)
     neg@(Perp _) -> k $ Neg $ \v -> coreify x neg (Pos v)
    where kp = k . Pos
          nx = fresh x "x"; ny = fresh x "y"; nt = fresh x "t"; ix = fresh x "i"
@@ -234,10 +233,9 @@ instance Reifier String (LL String String) where
       (t :& u,VPlus c a) -> With c x nx (coreify nx (if c then t else u) a)
       (All t,VExist ty a) -> Forall x ty nx (coreify nx (t ty) a)
       (B,VOne) -> Bot x
-      (Perp (Var _),VAtom _ y) -> y x
+      (Perp (Var _),VAtom y) -> Ax x y
     where nx = fresh x "x"; ny = fresh x "y"
   coreify x typ (N k) = reify x typ $ \(P a) -> k a -- Pattern ok because typ is positive
-  atom _ = Ax
 
 parens x = "(" <> x <> ")"
 braces x = "{" <> x <> "}"
@@ -277,7 +275,7 @@ cDecl t0 n = case t0 of
     (t :* u) -> "struct " <> braces (cDecl' t "fst" <> ";\n" <> cDecl' u "snd" <> ";\n") <> nn
     I -> "struct {} " <> nn
     (Var x) -> x <> " " <> nn
-    (Perp x) -> "void " <> parens (nn <> "*")
+    (Perp x) -> "void " <> parens ("*" <> nn)
   where nn = case n of Just x -> x; Nothing -> ""
 
 -- cFun "void " <> parens("*" <> nn) <> parens (cDecl x Nothing)
@@ -291,7 +289,7 @@ instance Reifier String String where
               (reify nx t $ \a -> reify ny u $ \b -> kp (VTensor a b))
     I -> kp VOne
     O -> "abort();\n"
-    Var _ -> kp $ VAtom x $ \z -> "CALL(" <> z <> "," <> x <> ");\n"
+    Var _ -> kp $ VAtom x
     neg@(Perp _) -> k $ Neg $ \v -> coreify xarg neg (Pos v) <>
                                     "CALL" <> parens (x <> ", " <> parens xarg) <> ";\n"
    where kp = k . Pos
@@ -302,18 +300,17 @@ instance Reifier String String where
     (t :| u,VTensor a b) -> (coreify nx t a) <> (coreify ny u b) <>
                             cDecl' dtyp x <> " = " <> braces (".left = " <> nx <> ";\n.right = " <> ny) <> ";\n"
     (B,VOne) -> cDecl' B x <> " = {};\n"
-    (Perp (Var _),VAtom _ y) -> y x
+    (Perp (Var _),VAtom y) -> cDecl' dtyp x <> "=" <> y <> ";\n"
     where nx = fresh x "x"; ny = fresh x "y"; ni = fresh x "i"
   coreify x typ (N k) = "void " <> xfun <> "(ENV," <> cDecl' typ xarg <> ") {\n" <> reify xarg typ (\(P a) -> k a) <> "}\n" <>
                         cDecl' (dual typ) x <> " = MK_CLOSURE(ENV,&" <> xfun <> ");\n"
    where xarg = fresh x "arg"
          xfun = fresh x "fun"
-  atom dtyp y x = cDecl' dtyp x <> "=" <> y <> ";\n"
 
 -- normalize :: forall r n. (Reifier n r, Eq n) => [(n, Type)] -> LL n n -> r
 normalize ctx = coeval [(n, (toVal n t,t)) | (n,t) <- ctx]
 
-focus :: n ~ String => ([(n,Type)],LL n n) -> LL n n
+-- focus :: n ~ String => ([(n,Type)],LL n n) -> LL n n
 focus = uncurry normalize
 
 compile :: n ~ String => ([(n,Type)],LL n n) -> n
