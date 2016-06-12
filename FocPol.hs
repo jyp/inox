@@ -1,23 +1,24 @@
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE UnicodeSyntax #-}
+{-# LANGUAGE ViewPatterns #-}
 
-module FocPol where
+module FP2 where
 
+import Data.String
+import Data.List ((\\))
 import Data.Monoid hiding (All)
 ----------------------------------------------
 -- Types
@@ -231,51 +232,98 @@ coreify x typ@(Perp _) (P v) = case (typ,v) of
     (B,VOne) -> Bot (x,B)
     (Perp (Var _),VAtom y) -> Ax (x,typ) (y,dual typ)
   where nx = fresh x "x"; ny = fresh x "y"
-coreify x typ (N k) = Up (x,typ) (nx,typ) $ reify nx typ $ \(P a) -> k a -- Pattern ok because typ is positive
+coreify x typ (N k) = reify nx typ $ \(P a) -> Up (x,typ) (nx,typ) $ k a -- Pattern ok because typ is positive
   where nx = fresh x "x"
 
 
 -- | Compile a focused, polarised logic into C.
-compileC ∷ LL (String, Type) (String, Type) → String
+compileC ∷ LL (String, Type) (String, Type) → C
 compileC t0 = case t0 of
-  Tensor (z,_) (x,t) (y,u) t' ->
-    cDecl' t x <> " = " <> z <> ".fst;\n" <>
-    cDecl' u y <> " = " <> z <> ".snd;\n" <>
+  Tensor z x y t' ->
+    cDecl' x <> " = " <> var z <> ".fst;\n" <>
+    cDecl' y <> " = " <> var z <> ".snd;\n" <>
     compileC t'
-  One _ t' -> "nop();\n" <> compileC t'
-  Zero (x,_) -> "abort(" <> show (x <> " cannot happen") <> ");\n"
-  Ax (x,_) (y,t) -> cDecl' t x <> "=" <> y <> ";\n"
-  Down (z,_) (x,_) t' ->
-    compileC t' <>
-    "CALL" <> parens (z <> ", " <> x) <> ";\n"
+  One _ t' -> "NOP();\n" <> compileC t'
+  Zero x -> "ABORT(" <> var x <> ");\n"
+  Ax x y -> stmt (coDecl x <> "=" <> var y)
 
-  -- compiling negatives, by construction of the eliminated variable.
-  Par (z,t) (x,_) t' (y,_) u' -> compileC t' <>
-                     compileC u' <>
-                     cDecl' (dual t) z <> " = " <> braces (".left = " <> x <> ";\n.right = " <> y) <> ";\n"
-  Bot (z,_) -> cDecl' I z <> " = {};\n"
-  Up (z,_) (x,t) t' ->
-     "void " <> xfun <> "(ENV," <> cDecl' t x <> ") {\n" <> compileC t' <> "}\n" <>
-     cDecl' (dual t) z <> " = MK_CLOSURE(ENV,&" <> xfun <> ");\n"
-   where xfun = fresh x "fun"
+  Down z (x,_) t' ->
+    cocompileC t' <>
+    "CALL" <> parens (var z <> ", " <> lit x) <> ";\n"
+
+-- | Compiling negatives, by construction of the eliminated variable.
+cocompileC :: LL (String, Type) (String, Type) → C
+cocompileC t0 = case t0 of
+  Ax x y -> stmt (coDecl x <> "=" <> var y)
+  Par z x t' y u' ->
+    cocompileC t' <>
+    cocompileC u' <>
+    coDecl z <> " = " <> braces (".left = " <> var x <> ";\n.right = " <> var y) <> ";\n"
+  Bot z -> stmt (cDecl' z <> " = {}")
+  Up z x@(xn,t) t' ->
+     cFun (cStructDecl env' Nothing <> "* env") t (Just xn) xfun <> " {\n" <> t'c <> "}\n" <> -- FIXME: hoist to the top level.
+     stmt (cStructDecl env' (Just $ "*" <> xenv) <> " = " <> cCall "malloc" [cCall "sizeof" []]) <>
+     stmt (cDecl' z <> "=" <> braces (lit xenv))
+    where xenv = (xn ++ "_env")
+          xfun = fresh xn "fun"
+          t'c@(Code _ env _) = compileC t'
+          env' = env \\\ [xn]
+
+xs \\\ ys = [x | x <- xs , not (fst x `elem` ys)]
+
 
 parens x = "(" <> x <> ")"
 braces x = "{" <> x <> "}"
 pair x y = parens $ x <> "," <> y
 
+data C = Code {cCode :: String, cOccs :: [(String,Type)], cDecls :: [String]}
 
-cDecl :: Type -> Maybe String -> String
+instance IsString C where
+  fromString = lit
+
+lit ∷ String → C
+lit s = Code s [] []
+
+var ∷ (String,Type) → C
+var (s,t) = Code s [(s,t)] []
+
+dcl :: String -> C
+dcl s = Code s [] [s]
+
+instance Monoid C where
+  mempty = Code mempty mempty mempty
+  mappend (Code c1 v1 d1) (Code c2 v2 d2) = Code (c1 <> c2) (v1 <> (v2 \\\ d1)) (d1 <> d2)
+
+cDecl :: Type -> Maybe String -> C
 cDecl t0 n = case t0 of
-    (t :* u) -> "struct " <> braces (cDecl' t "fst" <> ";\n" <> cDecl' u "snd" <> ";\n") <> nn
-    I -> "struct {} " <> nn
-    (Var x) -> x <> " " <> nn
-    (Perp x) -> "void " <> parens ("*" <> nn)
-  where nn = case n of Just x -> x; Nothing -> ""
+    (t :* u) -> cStructDecl [("fst",t),("snd",u)] n
+    I -> cStructDecl [] n
+    (Var x) -> lit x <> " " <> cName n
+    (Perp t) -> "struct {" <> cFun "char*" t Nothing "code*" <> ";\n" <>
+                "         char env[0];}" <> cName n
+
+cFun :: C -> Type -> Maybe String -> String -> C
+cFun env t arg n = "void (" <> lit n <> ")(" <> cDecl t arg <> "," <> env <> ")"
 
 -- cFun "void " <> parens("*" <> nn) <> parens (cDecl x Nothing)
 
-cDecl' ∷ Type → String → String
-cDecl' t n = cDecl t (Just n)
+cDecl0 t = cDecl t Nothing
+
+coDecl (n,t) = cDecl (dual t) (Just n)
+cDecl' (n,t) = cDecl t (Just n)
+
+cStructDecl :: [(String,Type)] -> Maybe String -> C
+cStructDecl fields n = "struct " <> braces (mconcat [cDecl' (f,t) <> ";\n" | (f,t) <- fields]) <> cName n
+
+cName ∷ Maybe String → C
+cName (Just x) = dcl x
+cName Nothing = ""
+
+stmt x = x <> lit ";\n"
+
+cCall x args = x <> parens (mconcat args)
+
+
 
 freeVars :: Val r -> [String]
 freeVars (Neg _) = []
