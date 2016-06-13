@@ -15,10 +15,10 @@
 {-# LANGUAGE UnicodeSyntax #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module FP2 where
+module FocPol where
 
 import Data.String
-import Data.List ((\\))
+-- import Data.List ((\\))
 import Data.Monoid hiding (All)
 ----------------------------------------------
 -- Types
@@ -258,12 +258,15 @@ cocompileC t0 = case t0 of
   Par z x t' y u' ->
     cocompileC t' <>
     cocompileC u' <>
-    coDecl z <> " = " <> braces (".left = " <> var x <> ";\n.right = " <> var y) <> ";\n"
+    cDecl' z <> " = " <> braces (".left = " <> var x <> ";\n.right = " <> var y) <> ";\n"
   Bot z -> stmt (cDecl' z <> " = {}")
   Up z x@(xn,t) t' ->
-     cFun (cStructDecl env' Nothing <> "* env") t (Just xn) xfun <> " {\n" <> t'c <> "}\n" <> -- FIXME: hoist to the top level.
-     stmt (cStructDecl env' (Just $ "*" <> xenv) <> " = " <> cCall "malloc" [cCall "sizeof" []]) <>
-     stmt (cDecl' z <> "=" <> braces (lit xenv))
+     cFun (cStructDecl env' Nothing <> "* env") t (Just xn) xfun <> " {\n" <>
+        mconcat [stmt (var v <> "= env." <> var v) | v <- env'] <>
+        t'c <> "}\n" <> -- FIXME: hoist to the top level.
+     stmt (cDecl' z <> " = " <> cCall "malloc" [cCall "sizeof" []]) <>
+     stmt (cStructDecl env' (Just xenv) <> " = " <> braces (commas $ map var env')) <>
+     stmt ("*" <> var z <> "=" <> braces (commas [lit xfun,lit xenv] ))
     where xenv = (xn ++ "_env")
           xfun = fresh xn "fun"
           t'c@(Code _ env _) = compileC t'
@@ -271,7 +274,8 @@ cocompileC t0 = case t0 of
 
 xs \\\ ys = [x | x <- xs , not (fst x `elem` ys)]
 
-
+commas [] = ""
+commas xs = foldr1 (\x y -> x <> ", " <> y) xs
 parens x = "(" <> x <> ")"
 braces x = "{" <> x <> "}"
 pair x y = parens $ x <> "," <> y
@@ -300,7 +304,7 @@ cDecl t0 n = case t0 of
     I -> cStructDecl [] n
     (Var x) -> lit x <> " " <> cName n
     (Perp t) -> "struct {" <> cFun "char*" t Nothing "code*" <> ";\n" <>
-                "         char env[0];}" <> cName n
+                "         char env[0];} *" <> cName n
 
 cFun :: C -> Type -> Maybe String -> String -> C
 cFun env t arg n = "void (" <> lit n <> ")(" <> cDecl t arg <> "," <> env <> ")"
