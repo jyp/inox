@@ -17,8 +17,10 @@
 
 module FocPol where
 
+import Data.Char
+import Data.Function (on)
 import Data.String
--- import Data.List ((\\))
+import Data.List (nubBy)
 import Data.Monoid hiding (All)
 ----------------------------------------------
 -- Types
@@ -193,9 +195,11 @@ coeval env t = case t of
 -- toVal :: forall r n. Reifier n r => n -> Type -> Val r
 toVal x (Perp t) = Neg $ \a -> Down (x,Perp t) (x_arg,Perp t) $ coreify x_arg (Perp t) (Pos a)
   where x_arg = fresh x "arg"
--- quirk:if we don't have this then the negative atoms coming from the
--- environment will not be considered as closures, but as variables we can just
--- write into.
+-- quirk:if we don't have the above equation then the negative atoms coming from
+-- the environment will not be considered as closures, but as variables we can
+-- just write into. That could be ok for atomic data types! (Instead of doing
+-- the above instead of passing a closure to call we could instead pass a
+-- pointer to the variable.)
 toVal x (Perp t) = Neg $ \a -> coreify x (Perp t) (Pos a)
 toVal x t = Shift $ \k -> reify x t $ \(P a) -> k a
 -- The above line is the only place in the where shift is created. (Shifts
@@ -249,7 +253,7 @@ compileC t0 = case t0 of
 
   Down z (x,_) t' ->
     cocompileC t' <>
-    "CALL" <> parens (var z <> ", " <> lit x) <> ";\n"
+    var z <> "->code" <> parens (commas [lit (quoteVar x),var z <> "->env"]) <> ";\n"
 
 -- | Compiling negatives, by construction of the eliminated variable.
 cocompileC :: LL (String, Type) (String, Type) → C
@@ -258,26 +262,28 @@ cocompileC t0 = case t0 of
   Par z x t' y u' ->
     cocompileC t' <>
     cocompileC u' <>
-    cDecl' z <> " = " <> braces (".left = " <> var x <> ";\n.right = " <> var y) <> ";\n"
+    coDecl z <> " = " <> braces (".fst = " <> var x <> ";\n.snd = " <> var y) <> ";\n"
   Bot z -> stmt (cDecl' z <> " = {}")
   Up z x@(xn,t) t' ->
-     cFun (cStructDecl env' Nothing <> "* env") t (Just xn) xfun <> " {\n" <>
-        mconcat [stmt (var v <> "= env." <> var v) | v <- env'] <>
-        t'c <> "}\n" <> -- FIXME: hoist to the top level.
-     stmt (cDecl' z <> " = " <> cCall "malloc" [cCall "sizeof" []]) <>
+     cFun (envStruct <> "* env") t (Just xn) xfun <>
+     braces (mconcat [stmt (cDecl' v <> "= env->" <> var v) | v <- env'] <>
+             t'c )<> -- FIXME: hoist to the top level.
+     stmt (coDecl z <> " = " <> cCall "malloc" ["4 /* fixme */+" <>  cCall "sizeof" [envStruct]]) <>
      stmt (cStructDecl env' (Just xenv) <> " = " <> braces (commas $ map var env')) <>
-     stmt ("*" <> var z <> "=" <> braces (commas [lit xfun,lit xenv] ))
+     stmt (var z <> "->code = " <> lit xfun) <> -- fixme: add a cast
+     stmt (var z <> "->env = " <> lit xenv)
     where xenv = (xn ++ "_env")
-          xfun = fresh xn "fun"
+          xfun = quoteVar $ fresh xn "fun"
           t'c@(Code _ env _) = compileC t'
-          env' = env \\\ [xn]
+          env' = nubBy ((==) `on` fst) (env \\\ [xn])
+          envStruct = cStructDecl env' Nothing
 
 xs \\\ ys = [x | x <- xs , not (fst x `elem` ys)]
 
 commas [] = ""
 commas xs = foldr1 (\x y -> x <> ", " <> y) xs
 parens x = "(" <> x <> ")"
-braces x = "{" <> x <> "}"
+braces x = "{\n" <> x <> "}"
 pair x y = parens $ x <> "," <> y
 
 data C = Code {cCode :: String, cOccs :: [(String,Type)], cDecls :: [String]}
@@ -289,25 +295,33 @@ lit ∷ String → C
 lit s = Code s [] []
 
 var ∷ (String,Type) → C
-var (s,t) = Code s [(s,t)] []
+var (s,t) = Code (quoteVar s) [(s,t)] []
 
 dcl :: String -> C
-dcl s = Code s [] [s]
+dcl s = Code (quoteVar s) [] [s]
 
 instance Monoid C where
   mempty = Code mempty mempty mempty
   mappend (Code c1 v1 d1) (Code c2 v2 d2) = Code (c1 <> c2) (v1 <> (v2 \\\ d1)) (d1 <> d2)
 
+quoteVar :: String -> String
+quoteVar = concatMap quoteChar
+
+quoteChar :: Char -> String
+quoteChar '_' = "__"
+quoteChar '\'' = "_p"
+quoteChar x | isAlphaNum x = [x]
+            | otherwise = show (ord x)
 cDecl :: Type -> Maybe String -> C
 cDecl t0 n = case t0 of
     (t :* u) -> cStructDecl [("fst",t),("snd",u)] n
     I -> cStructDecl [] n
     (Var x) -> lit x <> " " <> cName n
-    (Perp t) -> "struct {" <> cFun "char*" t Nothing "code*" <> ";\n" <>
+    (Perp t) -> "struct {" <> cFun "char*" t Nothing "(*code)" <> ";\n" <>
                 "         char env[0];} *" <> cName n
 
 cFun :: C -> Type -> Maybe String -> String -> C
-cFun env t arg n = "void (" <> lit n <> ")(" <> cDecl t arg <> "," <> env <> ")"
+cFun env t arg n = "void " <> lit n <> "(" <> cDecl t arg <> "," <> env <> ")"
 
 -- cFun "void " <> parens("*" <> nn) <> parens (cDecl x Nothing)
 
@@ -323,26 +337,22 @@ cName ∷ Maybe String → C
 cName (Just x) = dcl x
 cName Nothing = ""
 
+stmt ∷ C → C
 stmt x = x <> lit ";\n"
 
 cCall x args = x <> parens (mconcat args)
 
 
-
-freeVars :: Val r -> [String]
-freeVars (Neg _) = []
-freeVars (Pos p) = case p of
-  VAtom x -> [x]
-  VExist _ v -> freeVars v
-  VTensor a b -> freeVars a <> freeVars b
-  VPlus _ a -> freeVars a
-  VOne -> []
-
 -- normalize :: forall r n. (Reifier n r, Eq n) => [(n, Type)] -> LL n n -> r
 normalize ctx = coeval [(n, (toVal n t,t)) | (n,t) <- ctx]
 
 
-compile (ctx,input) = compileC $ (normalize ctx input)
+compile ∷ ([(String, Type)], LL String String) → String
+compile (ctx,input) = cCode $
+  "#include <stdlib.h>\nvoid main_function(" <> cctx <> ") " <> braces t'c
+  where           t'c = compileC t'
+                  t' = (normalize ctx input)
+                  cctx = commas [cDecl' x | x <- ctx]
 
 ------
 -- ex
