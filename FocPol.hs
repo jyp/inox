@@ -262,7 +262,7 @@ cocompileC t0 = case t0 of
   Par z x t' y u' ->
     cocompileC t' <>
     cocompileC u' <>
-    coDecl z <> " = " <> braces (".fst = " <> var x <> ";\n.snd = " <> var y) <> ";\n"
+    coDecl z <> " = " <> braces (".fst = " <> var x <> ",\n.snd = " <> var y) <> ";\n"
   Bot z -> stmt (cDecl' z <> " = {}")
   Up z x@(xn,t) t' ->
      cFun (envStruct <> "* env") t (Just xn) xfun <>
@@ -271,12 +271,15 @@ cocompileC t0 = case t0 of
      stmt (coDecl z <> " = " <> cCall "malloc" ["4 /* fixme */+" <>  cCall "sizeof" [envStruct]]) <>
      stmt (cStructDecl env' (Just xenv) <> " = " <> braces (commas $ map var env')) <>
      stmt (var z <> "->code = " <> lit xfun) <> -- fixme: add a cast
-     stmt (var z <> "->env = " <> lit xenv)
+     stmt (cCast envStruct (var z <> "->env ") <> " = " <> lit (quoteVar xenv))
     where xenv = (xn ++ "_env")
           xfun = quoteVar $ fresh xn "fun"
           t'c@(Code _ env _) = compileC t'
           env' = nubBy ((==) `on` fst) (env \\\ [xn])
           envStruct = cStructDecl env' Nothing
+
+cCast ∷ C -> C -> C
+cCast typ expr = parens ("*" <> parens (typ <> "*") <> parens ("&" <> expr))
 
 xs \\\ ys = [x | x <- xs , not (fst x `elem` ys)]
 
@@ -349,7 +352,10 @@ normalize ctx = coeval [(n, (toVal n t,t)) | (n,t) <- ctx]
 
 compile ∷ ([(String, Type)], LL String String) → String
 compile (ctx,input) = cCode $
-  "#include <stdlib.h>\nvoid main_function(" <> cctx <> ") " <> braces t'c
+  "#include <stdlib.h>\n" <>
+  "typedef int A;\n" <>
+  "typedef int B;\n" <>
+  "void main_function(" <> cctx <> ") " <> braces t'c
   where           t'c = compileC t'
                   t' = (normalize ctx input)
                   cctx = commas [cDecl' x | x <- ctx]
@@ -376,3 +382,6 @@ foc = ([("aPbPc",Var "a" `par` (Var "b" `par` Var "c"))
                        (Par "bPc"
                         "b" (Ax "b" "b'")
                         "c" (Ax "c" "c'")))))
+
+main ∷ IO ()
+main = writeFile "simp.c" $ compile simpl
