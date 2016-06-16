@@ -379,9 +379,10 @@ cleanStructs = map snd . nubBy ((==) `on` fst) . reverse
 compile ∷ ([(String, Type)], LL String String) → String
 compile (ctx,input) = cCode $
   "#include <stdlib.h>\n" <>
+  "#include <string.h>\n" <>
   "typedef int A;\n" <>
   "typedef int B;\n" <>
-  mconcat (cleanStructs (cStructs t'c <> cStructs cctx)) <>
+  mconcat (cleanStructs (cStructs cctx <> cStructs t'c)) <>
   ("void main_function(" <> cctx <> ") " <> braces t'c)
   where           t'c = compileC t'
                   t' = (normalize ctx input)
