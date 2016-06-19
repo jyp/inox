@@ -1,3 +1,29 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE UnicodeSyntax #-}
+{-# LANGUAGE ViewPatterns #-}
+
+module C.Flat where
+
+import CLL
+import Data.Monoid
+import Data.List
+import Data.Function
+import C.Common
+
+
 -- | Compile a focused, polarised logic into C.
 compileC ∷ LL (String, Type) (String, Type) → C
 compileC t0 = case t0 of
@@ -73,4 +99,13 @@ cName ∷ Maybe String → C
 cName (Just x) = dcl x
 cName Nothing = ""
 
-cCall x args = x <> parens (commas args)
+
+compile ∷ ([(String, Type)], LL String String) → String
+compile (ctx,input) = cCode $
+  "#include <cd.h>\n" <>
+  mconcat (cleanStructs (cStructs cctx <> cStructs t'c)) <>
+  lit (mconcat (cDefs t'c)) <>
+  ("void main_function(" <> cctx <> ") " <> braces t'c)
+  where           t'c = compileC t'
+                  t' = (normalize ctx input)
+                  cctx = commas [cDecl' x | x <- ctx]

@@ -17,9 +17,12 @@
 
 module C.Common where
 
+import Data.List
 import Data.String
 import Data.Monoid
 import CLL
+import Data.Char
+import Data.Function
 
 (~+~) :: C -> C -> C
 x ~+~ y = x <> "+" <> y
@@ -86,15 +89,8 @@ stmt x = x <> lit ";\n"
 -- would be nice to use a map for this to avoid nubBy complexity. However we
 -- need to remember the order things appeared so that we can sort the
 -- declarations in reverse dependency order.
+cleanStructs :: [(String,C)] -> [C]
 cleanStructs = map snd . nubBy ((==) `on` fst) . reverse
 
 
-compile ∷ ([(String, Type)], LL String String) → String
-compile (ctx,input) = cCode $
-  "#include <cf.h>\n" <>
-  mconcat (cleanStructs (cStructs cctx <> cStructs t'c)) <>
-  lit (mconcat (cDefs t'c)) <>
-  ("void main_function(" <> cctx <> ") " <> braces t'c)
-  where           t'c = compileC t'
-                  t' = (normalize ctx input)
-                  cctx = commas [cDecl' x | x <- ctx]
+cCall x args = x <> parens (commas args)
