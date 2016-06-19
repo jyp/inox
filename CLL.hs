@@ -15,13 +15,10 @@
 {-# LANGUAGE UnicodeSyntax #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module FocPol where
+module CLL where
 
-import Data.Char
-import Data.Function (on)
-import Data.String
-import Data.List (nubBy)
 import Data.Monoid hiding (All)
+
 ----------------------------------------------
 -- Types
 
@@ -231,8 +228,9 @@ reify x t0 k = case t0 of
 -- coreify x typ@(Perp _) (S k) = k $ \v -> case (typ,v) of -- (No-Foc)
 coreify x typ@(Perp _) (P v) = case (typ,v) of
     (t :| u,VTensor a b) -> Par (x,typ) (nx,t) (coreify nx t a) (ny,u) (coreify ny u b)
-    -- (t :& u,VPlus c a) -> With c x nx (coreify nx (if c then t else u) a)
-    -- (All t,VExist ty a) -> Forall x ty nx (coreify nx (t ty) a)
+    (t :& u,VPlus c a) -> With c (x,typ) (nx,w) (coreify nx w a)
+      where w = if c then t else u
+    (All t,VExist ty a) -> Forall (x,typ) ty (nx,t ty) (coreify nx (t ty) a)
     (B,VOne) -> Bot (x,B)
     (Perp (Var _),VAtom y) -> Ax (x,typ) (y,dual typ)
   where nx = fresh x "x"; ny = fresh x "y"
@@ -240,153 +238,13 @@ coreify x typ (N k) = reify nx typ $ \(P a) -> Up (x,typ) (nx,typ) $ k a -- Patt
   where nx = fresh x "x"
 
 
--- | Compile a focused, polarised logic into C.
-compileC ∷ LL (String, Type) (String, Type) → C
-compileC t0 = case t0 of
-  Tensor z x y t' ->
-    cDecl' x <> " = " <> var z <> ".fst;\n" <>
-    cDecl' y <> " = " <> var z <> ".snd;\n" <>
-    compileC t'
-  One _ t' -> "NOP();\n" <> compileC t'
-  Zero x -> "ABORT(" <> var x <> ");\n"
-  Ax x y -> stmt (coDecl x <> "=" <> var y)
-
-  Down z (x,_) t' ->
-    cocompileC t' <>
-    var z <> "->code" <> parens (commas [lit (quoteVar x),var z <> "->env"]) <> ";\n"
-
--- | Compiling negatives, by construction of the eliminated variable.
-cocompileC :: LL (String, Type) (String, Type) → C
-cocompileC t0 = case t0 of
-  Ax x y -> stmt (coDecl x <> "=" <> var y)
-  Par z x t' y u' ->
-    cocompileC t' <>
-    cocompileC u' <>
-    coDecl z <> " = " <> braces (".fst = " <> var x <> ",\n.snd = " <> var y) <> ";\n"
-  Bot z -> stmt (cDecl' z <> " = {}")
-  Up z x@(xn,t) t' ->
-     cFun (envStruct <> "* env") t (Just xn) xfun <>
-     braces (mconcat [stmt (cDecl' v <> "= env->" <> var v) | v <- env'] <>
-             t'c )<> -- FIXME: hoist to the top level.
-     stmt (coDecl z <> " = " <> cCall "malloc" ["4 /* fixme */+" <>  cCall "sizeof" [envStruct]]) <>
-     stmt (envStruct <> " " <> cXenv <> " = " <> braces (commas $ map var env')) <>
-     stmt (var z <> "->code = " <> lit xfun) <> -- fixme: add a cast
-     stmt (cCall "memcpy" [var z <> "->env ","&" <> cXenv,cCall "sizeof" [cXenv]])
-    where xenv = (xn ++ "_env")
-          xfun = quoteVar $ fresh xn "fun"
-          t'c@(Code _ env _ _ _) = compileC t'
-          env' = nubBy ((==) `on` fst) (env \\\ [xn])
-          envStruct = cStructDef (cEnvName env') (cStruct env')
-          cXenv = lit (quoteVar xenv)
-
-cCast ∷ C -> C -> C
-cCast typ expr = parens ("*" <> parens (typ <> "*") <> parens ("&" <> expr))
-
 xs \\\ ys = [x | x <- xs , not (fst x `elem` ys)]
 
-commas [] = ""
-commas xs = foldr1 (\x y -> x <> ", " <> y) xs
-parens x = "(" <> x <> ")"
-braces x = "{\n" <> x <> "}"
-pair x y = parens $ x <> "," <> y
-
-data C = Code {cCode :: String, cOccs :: [(String,Type)], cDecls :: [String], cDefs :: [String], cStructs ::  [(String,C)]}
-
-instance IsString C where
-  fromString = lit
-
-lit ∷ String → C
-lit s = Code s [] [] [] []
-
-var ∷ (String,Type) → C
-var (s,t) = Code (quoteVar s) [(s,t)] [] [] []
-
-dcl :: String -> C
-dcl s = Code (quoteVar s) [] [s] [] []
-
-def :: C -> C
-def (Code s occs decls defs structs) = Code [] occs decls (s:defs) structs
-
-cStructDef :: String -> C -> C
-cStructDef name body = Code ("struct " <> n) [] [] [] [(n,stmt ("struct " <> lit n <> braces body))]
-  where n = quoteVar name
-
-
-instance Monoid C where
-  mempty = Code mempty mempty mempty mempty mempty
-  mappend (Code c1 v1 d1 f1 s1) (Code c2 v2 d2 f2 s2) = Code (c1 <> c2) (v1 <> (v2 \\\ d1)) (d1 <> d2) (f1 <> f2) (s1 <> s2)
-
-quoteVar :: String -> String
-quoteVar = concatMap quoteChar
-
-quoteChar :: Char -> String
-quoteChar '_' = "__"
-quoteChar '\'' = "_p"
-quoteChar x | isAlphaNum x = [x]
-            | otherwise = show (ord x)
-cDecl :: Type -> Maybe String -> C
-cDecl t0 n = case t0 of
-    (t :* u) -> cStructDef (cTypeName t0) (cStruct [("fst",t),("snd",u)]) <+> cName n
-    I -> cStructDef (cTypeName t0) (cStruct []) <+> cName n
-    (Var x) -> lit x <> " " <> cName n
-    (Perp t) -> cStructDef (cTypeName t0)
-                  (cFun "char*" t Nothing "(*code)" <> ";\n" <>
-                   "char env[0];") <> "*" <+> cName n
-
-(<+>) ∷ ∀ m. (IsString m, Monoid m) ⇒ m → m → m
-x <+> y = x <> " " <> y
-
-cTypeName :: Type -> String
-cTypeName (t :* u) = "p" <> cTypeName t <> "_" <> cTypeName u
-cTypeName (I) = "i"
-cTypeName (Var x) = "v" <> x
-cTypeName (Perp t) = "n" <> cTypeName t
-
-cEnvName :: [(String,Type)] -> String
-cEnvName env = "e" <> mconcat ["f_" <> f <> "_" <> cTypeName t | (f,t) <- env]
-
-cFun :: C -> Type -> Maybe String -> String -> C
-cFun env t arg n = "void " <> lit n <> "(" <> cDecl t arg <> "," <> env <> ")"
-
--- cFun "void " <> parens("*" <> nn) <> parens (cDecl x Nothing)
-
-cDecl0 t = cDecl t Nothing
-
-coDecl (n,t) = cDecl (dual t) (Just n)
-cDecl' (n,t) = cDecl t (Just n)
-
-cStruct :: [(String,Type)] -> C
-cStruct fields = (mconcat [cDecl' (f,t) <> ";\n" | (f,t) <- fields])
-
-cName ∷ Maybe String → C
-cName (Just x) = dcl x
-cName Nothing = ""
-
-stmt ∷ C → C
-stmt x = x <> lit ";\n"
-
-cCall x args = x <> parens (commas args)
 
 
 -- normalize :: forall r n. (Reifier n r, Eq n) => [(n, Type)] -> LL n n -> r
 normalize ctx = coeval [(n, (toVal n t,t)) | (n,t) <- ctx]
 
--- would be nice to use a map for this to avoid nubBy complexity. However we
--- need to remember the order things appeared so that we can sort the
--- declarations in reverse dependency order.
-cleanStructs = map snd . nubBy ((==) `on` fst) . reverse
-
-compile ∷ ([(String, Type)], LL String String) → String
-compile (ctx,input) = cCode $
-  "#include <stdlib.h>\n" <>
-  "#include <string.h>\n" <>
-  "typedef int A;\n" <>
-  "typedef int B;\n" <>
-  mconcat (cleanStructs (cStructs cctx <> cStructs t'c)) <>
-  ("void main_function(" <> cctx <> ") " <> braces t'c)
-  where           t'c = compileC t'
-                  t' = (normalize ctx input)
-                  cctx = commas [cDecl' x | x <- ctx]
 
 ------
 -- ex
@@ -410,6 +268,3 @@ foc = ([("aPbPc",Var "a" `par` (Var "b" `par` Var "c"))
                        (Par "bPc"
                         "b" (Ax "b" "b'")
                         "c" (Ax "c" "c'")))))
-
-main ∷ IO ()
-main = writeFile "simp.c" $ compile simpl
