@@ -17,7 +17,7 @@
 
 module CLL where
 
-import Data.Monoid hiding (All)
+import Data.Monoid hiding (All,Dual)
 
 ----------------------------------------------
 -- Types
@@ -37,6 +37,7 @@ data Type where
   (:*), (:+)  :: Type -> Type -> Type
   I, O :: Type
   Ex :: (Type -> Type) -> Type
+  OfCourse :: Type -> Type
   Var :: String -> Type
  -- deriving (Show)
 
@@ -50,16 +51,19 @@ instance Show Type where
     O -> "0"
     Var x -> x
     Perp x -> "~" <> show x
+    OfCourse x -> "!" <> show x
 
 dual :: Type -> Type
 dual (Perp x) = x
 dual x = Perp x
 
-pattern x :| y <- Perp ((dual -> x) :* (dual -> y))
-pattern x :& y <- Perp ((dual -> x) :+ (dual -> y))
+pattern Dual x <- (dual -> x)
+pattern x :| y <- Perp (Dual x :* Dual y)
+pattern x :& y <- Perp (Dual x :+ Dual y)
 pattern T = Perp O
 pattern B = Perp I
 pattern All t <- Perp (Ex ((dual .) -> t)) -- ?FIXME? Dualise the arg?
+pattern WhyNot t <- Perp (OfCourse (Dual t))
 
 par :: Type -> Type -> Type
 par x y = Perp (dual x :* dual y)
@@ -68,20 +72,26 @@ par x y = Perp (dual x :* dual y)
 -- Terms
 
 data LL r n where
-  Tensor :: r -> n -> n -> LL r n -> LL r n
-  Par :: r -> n -> LL r n -> n -> LL r n -> LL r n
-  Plus :: r -> n -> LL r n -> n -> LL r n -> LL r n
-  With :: Bool -> r -> n -> LL r n -> LL r n
-  One :: r -> LL r n -> LL r n
-  Zero :: r -> LL r n
-  Bot :: r -> LL r n
-  Exist :: r -> String -> n -> LL r n -> LL r n
-  Forall :: r -> Type -> n -> LL r n -> LL r n
   Ax :: r -> r -> LL r n
   Cut :: Type -> n -> LL r n -> n -> LL r n -> LL r n
 
-  Down :: r -> n -> LL r n -> LL r n
-  Up   :: r -> n -> LL r n -> LL r n
+  Tensor :: r -> n -> n -> LL r n -> LL r n
+  Par :: r -> n -> LL r n -> n -> LL r n -> LL r n
+  One :: r -> LL r n -> LL r n
+  Bot :: r -> LL r n
+
+  Plus :: r -> n -> LL r n -> n -> LL r n -> LL r n
+  With :: Bool -> r -> n -> LL r n -> LL r n
+  Zero :: r -> LL r n
+
+  Exist :: r -> String -> n -> LL r n -> LL r n
+  Forall :: r -> Type -> n -> LL r n -> LL r n
+
+  Down, Up :: r -> n -> LL r n -> LL r n
+
+  Quest, Bang :: r -> n -> LL r n -> LL r n
+  Derelict :: r -> LL r n -> LL r n
+  Contract :: r -> n -> n -> LL r n -> LL r n
  deriving (Show)
 ------------------------------------------------
 -- Values
@@ -93,6 +103,7 @@ data Pos r where
   VPlus :: Bool -> Val r -> Pos r
   VOne  :: Pos r
   VAtom :: String -> Pos r
+  VBox :: Pos r -> Pos r
   -- for type variables and builtin atoms.
  deriving Show
 

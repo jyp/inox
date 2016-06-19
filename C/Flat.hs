@@ -56,7 +56,21 @@ compileC t0 = case t0 of
   Down z x t' ->
     stmt ("char " <> var x <> "[" <> compileSize t' <> "]") <>
     cocompileC t' <>
-    stmt (cCall "CALL" [var z,var x,sizeOfVar x])
+    stmt (cCall "CLOSURE_CALL" [var z,var x,sizeOfVar x])
+
+  Bang z x t' ->
+    stmt (decl x <> " = " <> cCall "BOX_CONTENTS" [var z]) <>
+    compileC t'
+
+  Contract z x y t' ->
+    stmt (decl x <> " = " <> var z) <>
+    stmt (decl y <> " = " <> var z) <>
+    stmt (cCall "BOX_REF_COUNT" [var z] <> "++") <>
+    compileC t'
+
+  Derelict z t' ->
+    stmt (cCall "BOX_DEREF" [var z]) <>
+    compileC t'
 
 
 compileSize :: LL (String, Type) (String, Type) → C
@@ -67,6 +81,7 @@ compileSize t0 = case t0 of
   Up z x@(xn,t) t' -> cCall "ENV_TO_CLOSURE_SIZE" (fmap sizeOfVar env')
     where (Code _ env _ _ _) = compileC t'
           env' = nubBy ((==) `on` fst) (env \\\ [xn])
+  Quest z x _ -> "BOX_SIZE"
 
 
 cocompileC :: LL (String, Type) (String, Type) → C
@@ -97,6 +112,10 @@ cocompileC t0 = case t0 of
           zfun = lit $ quoteVar $ fresh zn "fun"
           t'c@(Code _ env _ _ _) = compileC t'
           env' = nubBy ((==) `on` fst) (env \\\ [xn])
+  Quest z x t' -> stmt (cCall "AS_BOX" [var z] ~=~ cCall "BOX_ALLOC" [sizeOfVar x]) <>
+               stmt (cCall "BOX_REF_COUNT" [var z] ~=~ "1") <>
+               stmt (var x ~=~ cCall "BOX_CONTENTS" [var x]) <>
+               cocompileC t'
 
-main ∷ IO ()
-main = writeFile "simp.c" $ compile simpl
+-- main ∷ IO ()
+-- main = writeFile "simp.c" $ compile simpl
