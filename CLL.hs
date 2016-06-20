@@ -253,7 +253,7 @@ xs \\\ ys = [x | x <- xs , not (fst x `elem` ys)]
 
 
 
--- normalize :: forall r n. (Reifier n r, Eq n) => [(n, Type)] -> LL n n -> r
+normalize ∷ [(String, Type)] → LL String String → LL (String, Type) (String, Type)
 normalize ctx = coeval [(n, (toVal n t,t)) | (n,t) <- ctx]
 
 

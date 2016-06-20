@@ -25,14 +25,14 @@ import Data.Char
 import Data.Function
 
 (~+~) :: C -> C -> C
-x ~+~ y = x <> "+" <> y
+x ~+~ y = x <> " + " <> y
 
 cSum ∷ [C] → C
 cSum [] = "0"
 cSum xs = foldr1 (~+~) xs
 
 (~=~) :: C -> C -> C
-x ~=~ y = x <> "+" <> y
+x ~=~ y = x <> " = " <> y
 
 (<+>) ∷ ∀ m. (IsString m, Monoid m) ⇒ m → m → m
 x <+> y = x <> " " <> y
@@ -55,8 +55,8 @@ lit s = Code s [] [] [] []
 var ∷ (String,Type) → C
 var (s,t) = Code (quoteVar s) [(s,t)] [] [] []
 
-dcl :: String -> C
-dcl s = Code (quoteVar s) [] [s] [] []
+dcl :: (String,Type) -> C
+dcl (s,_t) = Code (quoteVar s) [] [s] [] []
 
 def :: C -> C
 def (Code s occs decls defs structs) = Code [] occs decls (s:defs) structs
