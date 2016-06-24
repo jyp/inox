@@ -3,5 +3,9 @@
 pkgs.stdenv.mkDerivation {
   name = "inox-buildenv";
 
-  buildInputs = with pkgs; [ haskellPackages.BNFC ];
+  buildInputs = with pkgs.haskellPackages; [
+    BNFC
+    alex
+    happy
+  ];
 }
