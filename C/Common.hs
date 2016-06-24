@@ -55,8 +55,11 @@ lit s = Code s [] [] [] []
 var ∷ (String,Type) → C
 var (s,t) = Code (quoteVar s) [(s,t)] [] [] []
 
-dcl :: (String,Type) -> C
-dcl (s,_t) = Code (quoteVar s) [] [s] [] []
+dcl' :: (String,Type) -> C
+dcl' = dcl . fst
+
+dcl :: String -> C
+dcl s = Code (quoteVar s) [] [s] [] []
 
 def :: C -> C
 def (Code s occs decls defs structs) = Code [] occs decls (s:defs) structs

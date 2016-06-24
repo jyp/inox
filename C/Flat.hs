@@ -38,7 +38,7 @@ sizeOf (Var t) _ = "sizeof(" <> lit t <> ")"
 sizeOf (t :* u) arr = sizeOf t arr ~+~ sizeOf u (arr ~+~ sizeOf t arr)
 sizeOf (Perp _) arr = "CLOSURE_SIZE(" <> arr <> ")"
 
-decl x = "char* " <> dcl x
+decl x = "char* " <> dcl' x
 
 sizeOfVar ∷ (String, Type) → C
 sizeOfVar x@(_,t) = sizeOf t (var x)
@@ -54,7 +54,7 @@ compileC t0 = case t0 of
   Ax x y -> stmt (decl x ~=~ var y)
 
   Down z x t' ->
-    stmt ("char " <> dcl x <> "[" <> compileSize t' <> "]") <>
+    stmt ("char " <> dcl' x <> "[" <> compileSize t' <> "]") <>
     cocompileC t' <>
     stmt (cCall "CLOSURE_CALL" [var z,var x,sizeOfVar x])
 
