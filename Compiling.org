@@ -1,0 +1,106 @@
+* In CLL, continuations = closures
+
+This is simply because thethere is a single function type (~A)
+isomorphic to A ⊸ ⊥.
+
+* Auto-Curryfication
+
+Consider a (linear) function
+
+f : A ⊸ B ⊸ C
+
+The type is encoded as:
+
+(~A ⅋ (~B ⅋ C))
+
+Which reduces as follows:
+
+  (~A ⅋ (~B ⅋ C)) 
+= ~(~~A ⊗ ~(~B ⅋ C))
+= ~(A ⊗ ~(~B ⅋ C))
+= ~(A ⊗ ~~(~~B ⊗ ~C))
+= ~(A ⊗ (B ⊗ ~C))
+
+When calling such a function, with x and y, arguments of type A and B,
+one will call the code for f with a structure consisting of x, y and a
+continuation. We are not creating any intermediate closure of type B ⊸
+C.
+
+Thus by doing the encoding steps ILL -> CLL -> focused CLL one
+optimises calls of curried functions.
+
+* Structure of closures
+
+The structure of a closure is a pair of
+- a pointer to code
+- an environment
+
+
+Note that, when compiling first-order code (e.g. A Pascal-like or C-like
+language), functions will have a single negative argument, like so:
+
+f : Param ⊸ (Result ⊸ ⊥) ⊸ ⊥
+
+Let us examine a call to f:
+
+
+x <- something
+res <- f(arg)
+y <- doSomething(x,res)
+return y
+
+What happens is that we pass to f a closure ('continuation') which
+will run doSomething and return its result. It will have x in its
+environment *as well as* the continuation to call in order to return
+the final result. In fact, sill in the first-order situation, we will
+each closure will have a single closure in its environment. Thus, we
+recover the stack structure. It would then be beneficial, when
+allocating a closure, to identify the 'inner closure' and simply stick
+the new closure in front.
+
+In this case the 'call stack' has the familiar structure:
+
+- return address
+- local vars
+- return address
+- local vars
+- return address
+- local vars
+
+etc.
+
+* Types of closures
+
+Note that the type of the environment is fully determined by the
+pointer to the code. This allows performing type-aware manipulation of
+closures without storing any further data.
+
+* Exponentials
+
+- A major interest of using LL is to eschew garbage collection.
+- We can fortunately handle exponentials using reference count
+- Represent an exponential by a pointer to a pair of a refcount + data
+- Boxing is implemented by moving the relevant data to the heap (setting refcount to 1)
+- Unboxing:
+  - access data from the heap (directly)
+  - THEN decrementing the refcount
+- When the refcount becomes 0, we have to follow the contents of the
+  data and decrement refcounts recursively.
+
+* Polymorphism
+
+- As far as possible I'd like to avoid useless boxing of data
+- (If boxing is required we can always use exponentials, or a special
+  operator (§))
+- This means that polymorphic values should be copied (and boxed) around as other
+  (primitive) types
+- Thus types will have a runtime representation, allowing for the copy
+  and (boxing) to be performed correctly.
+- One need to be able to pass around (and store) values whose size is dynamic
+
+* LLVM
+
+- musttail call
+- variable length arguments can be passed with the inalloca attribute (check also doc of musttail)
+  http://llvm.org/docs/InAlloca.html
+- Prefix Data allows to store closure runtime type info easily and efficiently

@@ -41,7 +41,7 @@ x <+> y = x <> " " <> y
 commas [] = ""
 commas xs = foldr1 (\x y -> x <> ", " <> y) xs
 parens x = "(" <> x <> ")"
-braces x = "{\n" <> x <> "}"
+braces x = "{" <> x <> "}"
 pair x y = parens $ x <> "," <> y
 
 data C = Code {cCode :: String, cOccs :: [(String,Type)], cDecls :: [String], cDefs :: [String], cStructs ::  [(String,C)]}
