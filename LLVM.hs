@@ -104,7 +104,7 @@ cocompileC t0 = case t0 of
                           | (v,i) <- zip env' [0..]] <>
                   -- cCall "free(CLOSURE_OF(env))"
                   t'c )) <>
-     stmt (dcl' z <> " = " <> cCall "malloc" ["4 /* fixme */+" <>  cCall "sizeof" [envStruct]]) <>
+     stmt (dcl' z <> " = call i8 * " <> cCall "@malloc" ["4 /* fixme */+" <>  cCall "sizeof" [envStruct]]) <>
      mconcat [stmt (tmp v "ptr" <> " = getelementptr " <> envStruct <> ", " <> envStruct <> "* " <> tmp z "" <> ", i32 0, i32 1, i32 " <> num i) <>
               stmt ("store " <> typOf v <> tmp v "ptr" <> ", " <> var v)
              | (v,i) <- zip env' [0..]] <>
