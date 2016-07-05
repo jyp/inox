@@ -1,9 +1,9 @@
 * In CLL, continuations = closures
 
-This is simply because thethere is a single function type (~A)
+This is simply because there is a single function type (~A)
 isomorphic to A ⊸ ⊥.
 
-* Auto-Curryfication
+* Auto-Currying
 
 Consider a (linear) function
 
