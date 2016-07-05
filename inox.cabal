@@ -15,7 +15,12 @@ build-type:     Simple
 executable inox
   default-language: Haskell2010
   other-modules:
-                ParseCore
+                Inox,
+                ParseCore,
+                Bnf.Core.Abs,
+                Bnf.Core.ErrM,
+                Bnf.Core.Lex,
+                Bnf.Core.Par
   build-depends:
                 base>=4,
                 array,
