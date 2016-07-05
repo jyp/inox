@@ -8,4 +8,8 @@ pkgs.stdenv.mkDerivation {
     alex
     happy
   ];
+
+  shellHook = ''
+    echo -e '\n\n\tBuild Inox with `make`\n\n'
+  '';
 }
