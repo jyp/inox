@@ -1,0 +1,98 @@
+
+* Types
+
+Let
+
+1. %F = Λα. ~(F ~α)
+2. μF = ∀α. !(Fα ⊸ α) ⊸ α
+2. νF = ∃α. !(α ⊸ Fα) ⊗ α
+3. ψF = F (ψF)
+
+We have:
+
+1 %%F = F
+2 ~(ψF) = ψ%F
+3 ~(μF) ≅ ν%F
+4 ~(νF) ≅ μ%F
+
+Proofs
+
+1  Easy consequence of ~~A = A
+
+2  lemma: ~(ΨF) = ~(F (ΨF)) = ~F (~~(ΨF)) = %F (~ψF)
+
+We get the result by co-recursion
+
+3
+   ~(∀α. !(Fα ⊸ α) ⊸ α)
+by def
+   ≅ ∃α. !(Fα ⊸ α) ⊗ ~α
+by change of variable
+   ≅ ∃α. !(F~α ⊸ ~α) ⊗ α
+   ≅ ∃α. !(α ⊸ ~F~α) ⊗ α
+   ≅ ∃α. !(α ⊸ %Fa) ⊗ α
+   ≅ ν %F
+4 Consequence of 3 and 1.
+
+
+
+* Looping combinator(s)
+muWalk  : ψ F ⊸ μ F 
+nuAlloc : ν F ⊸ ψ F
+
+In classical logic, these types are equivalent:
+
+ψ F ⊸ μ F ≅ ~(μ F) ⊸ ~(ψ F)
+           ≅ ν %F ⊸ ψ %F
+
+So muWalk and nuAlloc can be supported by the same primitive (axiom):
+
+ψ %F, ν F ⊢ loop
+
+* Static combinators:
+
+nuWalk : ψ F ⊸ ν F
+muAlloc : μ F ⊸ ψ F
+
+for the same reason the types are equivalent.
+
+ψ %F, μ F ⊢ lift
+
+
+* Cut-elimination rules.
+
+
+** Loop-lift
+ψ %F, μ F ⊢ lift            ψ F, ν %F ⊢ loop
+----------------------------------------------
+              μ F, ν %F ⊢
+
+
+becomes simply:
+
+              μ F, ν %F ⊢ ax
+
+** Loop-loop
+
+ ψ %F, ν F ⊢ loop            ψ F, ν %F ⊢ loop
+-----------------------------------------------
+                 ν F, ν %F ⊢
+
+
+does not obviously reduce. We may have another primitive such as:
+
+                 ν F, ν %F ⊢
+
+However, it isn't clear that it may have a more efficient implementation.
+
+
+** lift-lift
+
+ψ %F, μ F ⊢ lift            ψ F, μ %F ⊢ lift
+----------------------------------------------
+                μ F, μ %F ⊢
+
+
+
+
+
