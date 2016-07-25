@@ -5,15 +5,20 @@ Let
 
 1. %F = Λα. ~(F ~α)
 2. μF = ∀α. !(Fα ⊸ α) ⊸ α
-2. νF = ∃α. !(α ⊸ Fα) ⊗ α
-3. ψF = F (ψF)
+3. νF = ∃α. !(α ⊸ Fα) ⊗ α
+4. ψF = F (ψF)
 
 We have:
 
-1 %%F = F
-2 ~(ψF) = ψ%F
-3 ~(μF) ≅ ν%F
-4 ~(νF) ≅ μ%F
+1. % in involutive
+2. ψ is self dual
+3. μ and ν are dual
+
+1. %%F = F
+2. ~(ψF) = ψ%F
+3. ~(μF) ≅ ν%F
+4. ~(νF) ≅ μ%F
+
 
 Proofs
 
@@ -21,7 +26,7 @@ Proofs
 
 2  lemma: ~(ΨF) = ~(F (ΨF)) = ~F (~~(ΨF)) = %F (~ψF)
 
-We get the result by co-recursion
+We get the result by co-induction
 
 3
    ~(∀α. !(Fα ⊸ α) ⊸ α)
@@ -32,67 +37,60 @@ by change of variable
    ≅ ∃α. !(α ⊸ ~F~α) ⊗ α
    ≅ ∃α. !(α ⊸ %Fa) ⊗ α
    ≅ ν %F
+
 4 Consequence of 3 and 1.
 
 
 
-* Looping combinator(s)
-muWalk  : ψ F ⊸ μ F 
-nuAlloc : ν F ⊸ ψ F
+* Static combinators:
 
-In classical logic, these types are equivalent:
+nuWalk : ψ F ⊸ ν F -- co-algebra which destroys the fixpoint (removing the constructor of ψ)
+muAlloc : μ F ⊸ ψ F -- generate a fixpoint by running the algebra on constructor of ψ
+
+In classical logic, the above two types are equivalent:
 
 ψ F ⊸ μ F ≅ ~(μ F) ⊸ ~(ψ F)
            ≅ ν %F ⊸ ψ %F
 
-So muWalk and nuAlloc can be supported by the same primitive (axiom):
+These can be implemented by instanciation of the polymorphic
+parameter to Ψ.
 
-ψ %F, ν F ⊢ loop
-
-* Static combinators:
-
-nuWalk : ψ F ⊸ ν F
-muAlloc : μ F ⊸ ψ F
-
-for the same reason the types are equivalent.
-
-ψ %F, μ F ⊢ lift
-
-
-* Cut-elimination rules.
+- we have ~ψF, ∀α. !(Fα ⊸ α) ⊸ α
+- instanciate:
+- we have ~ψF, !(ψF ⊸ F(ψF)) ⊸ ψF
+- par rule
+- ~ψF, ψF ;  ~!(ψF ⊸ F(ψF))
+- ax
+- ~!(ψF ⊸ F(ψF))
+- this one can be 'run' by regular eval.
 
 
-** Loop-lift
-ψ %F, μ F ⊢ lift            ψ F, ν %F ⊢ loop
-----------------------------------------------
-              μ F, ν %F ⊢
+* Looping combinator(s)
+muWalk  : ψ F ⊸ μ F -- walk the fixpoint, applying the algebra supplied by μ F
+nuAlloc : ν F ⊸ ψ F -- run the co-algebra, constructing the fixpoint as we go.
+
+The above two can be obtained by combination of either the static combinator with
+
+loop : ν F ⊸ μ F
+
+This needs either to be a constant or be provided special support
+somehow.
 
 
-becomes simply:
-
-              μ F, ν %F ⊢ ax
-
-** Loop-loop
-
- ψ %F, ν F ⊢ loop            ψ F, ν %F ⊢ loop
------------------------------------------------
-                 ν F, ν %F ⊢
+* General Fixpoint?
 
 
-does not obviously reduce. We may have another primitive such as:
+fix : (A ⊸ A) ⊸ (A ⊸ A)
 
-                 ν F, ν %F ⊢
-
-However, it isn't clear that it may have a more efficient implementation.
-
-
-** lift-lift
-
-ψ %F, μ F ⊢ lift            ψ F, μ %F ⊢ lift
-----------------------------------------------
-                μ F, μ %F ⊢
+   A, ~A ⊢
+------------ fix
+   A, ~A ⊢
 
 
+eval rules:
 
 
-
+   A ⊢ f:A⊗B             A,B,Γ ⊢
+-------------- fix      -----------
+   A ⊢ A⊗B               A⊗B,Γ ⊢
+------------------------------------
