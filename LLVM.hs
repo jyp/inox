@@ -23,24 +23,24 @@ import Data.List
 import Data.Function
 import C.Common hiding (stmt,dcl')
 
-
+--------------------------------
+-- Helpers
+stmts = mconcat . map stmt
 stmt x = x <> "\n"
+percent x = "%" <> x
+num = lit . show
+
+---------------------------------
+-- Generation of LLVM types
+ptr x = x <> "*"
 
 struct :: [Type] -> C
 struct fields = braces $ commas $ map vmtype fields
 
-typeName :: Type -> String
-typeName (t :* u) = "p" <> typeName t <> "_" <> typeName u
-typeName (I) = "i"
-typeName (Var x) = "v" <> x
-typeName (Perp t) = "n" <> typeName t
-
-
 cFun :: String -> Type -> String -> C -> C
 cFun n t arg env = "void " <> lit n <> "(" <> vmtype t <> " " <> lit arg <> "," <> env <> ")"
 
-percent x = "%" <> x
-
+-- | Representation of a LL type
 vmtype :: Type -> C
 vmtype t0 = case t0 of
     (t :* u) -> struct [t,u]
@@ -48,24 +48,35 @@ vmtype t0 = case t0 of
     (Var x) -> percent (lit x)
     (Perp t) -> unkownCloType t <> " *"
 
-ptr x = x <> "*"
+-- | Function type when the env is unknown (thus a generic pointer)
 unknownFunType = funType "i8"
+
+-- | Function type getting an env and an arg
 funType env t = ptr (cFun "" t "" (ptr env))
 
 -- | Closure type when the environment is not known
 unkownCloType = cloType "[0 x i8]"
 
+-- | Representation of a closure
 cloType env t = braces (commas [unknownFunType t, env])
 
+typOf = vmtype . snd
+dualTypOf = vmtype . dual . snd
+
+-------------------
+-- Variable helpers
 dcl' :: (String, Type) -> C
 dcl' = percent . dcl . fst
 parameter (s,t) =  vmtype t <> " " <> dcl' (s,t)
 var' (s,t) = vmtype t <> " " <> percent  (var (s,t))
 coVar' (s,t) = vmtype (dual t) <> " " <> percent  (var (s,t))
 lit' = percent . lit
+tmp ∷ ∀ t. (String, t) → String → C
+tmp (s,_) suff = "%" <> lit (quoteVar s) <> "_" <> lit suff
 
-stmts = mconcat . map stmt
--- Compile a focused, polarised logic into LLVM IR.
+
+--------------------
+-- Main work
 
 -- | This function generates code to 'break into pieces' the environment which is
 -- eliminated by the corresponding LL proof.
@@ -95,12 +106,6 @@ compile t0 = case t0 of
       (commas [vmtype u <+> "%" <> lit (quoteVar x), "i8* " <> tmp z "env"])
     , "ret void" ]
 
-typOf = vmtype . snd
-dualTypOf = vmtype . dual . snd
-num = lit . show
-
-tmp ∷ ∀ t. (String, t) → String → C
-tmp (s,_) suff = "%" <> lit (quoteVar s) <> "_" <> lit suff
 
 -- | Compiling negatives, by construction of the eliminated variable. Note that
 -- we assume that the input proof is focused: thus there is a single (negative)
@@ -115,7 +120,7 @@ cocompile t0 = case t0 of
     cocompile u' <>
     tmp z "zero" ~=~ "insertvalue " <> dualTypOf z <> " undef, " <> coVar' x <> ", 0\n" <>
     dcl' z  ~=~ "insertvalue " <> dualTypOf z <> " " <> tmp z "zero" <> ", "  <> coVar' y  <> ",1\n"
-  Bot z -> "; BOT \n"
+  Bot z -> stmt ""
   Up z x@(xn,t) t' ->
      def ("define " <> cFun xfun t xnparam (ptr envStruct <+> "%env")<>
           braces (stmt mempty <>
@@ -151,10 +156,8 @@ cocompile t0 = case t0 of
           funTyp = funType envStruct t
           xnparam = "%" ++ quoteVar xn
 
-cEnvName :: [(String,Type)] -> String
-cEnvName env = "e" <> mconcat ["f_" <> f <> "_" <> typeName t | (f,t) <- env]
-
-
+------------------
+-- Top-level
 compilTop ∷ ([(String, Type)], LL String String) → String
 compilTop (ctx,input) = cCode $
   -- mconcat (cleanStructs (cStructs cctx <> cStructs t'c)) <>
