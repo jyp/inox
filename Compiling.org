@@ -52,8 +52,8 @@ return y
 What happens is that we pass to f a closure ('continuation') which
 will run doSomething and return its result. It will have x in its
 environment *as well as* the continuation to call in order to return
-the final result. In fact, sill in the first-order situation, we will
-each closure will have a single closure in its environment. Thus, we
+the final result. In fact, still in the first-order situation, each
+closure will have a single closure in its environment. Thus, we
 recover the stack structure. It would then be beneficial, when
 allocating a closure, to identify the 'inner closure' and simply stick
 the new closure in front.
