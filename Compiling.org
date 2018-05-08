@@ -96,7 +96,7 @@ closures without storing any further data.
   (primitive) types
 - Thus types will have a runtime representation, allowing for the copy
   and (boxing) to be performed correctly.
-- One need to be able to pass around (and store) values whose size is dynamic
+- One needs to be able to pass around (and store) values whose size is dynamic
 
 * LLVM
 

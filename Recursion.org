@@ -80,17 +80,32 @@ somehow.
 * General Fixpoint?
 
 
-fix : (A ⊸ A) ⊸ (A ⊸ A)
+fix : (A ⊸ A) → (A ⊸ A)
 
    A, ~A ⊢
 ------------ fix
    A, ~A ⊢
 
 
-eval rules:
+cut-elim:
+
+on the input, recurse:
+
+   x:A ⊢ f(x):A
+---------------------- fix
+   x:A ⊢ fix f x : A               Γ ⊢ a:A
+----------------------------------------------- cut
+              Γ ⊢ fix f a : A
 
 
-   A ⊢ f:A⊗B             A,B,Γ ⊢
--------------- fix      -----------
-   A ⊢ A⊗B               A⊗B,Γ ⊢
-------------------------------------
+
+      ...
+  ------------------
+   Γ ⊢ fix f a : A                     x:A ⊢ f(x):A
+ ----------------------------------------------------- cut
+     Γ ⊢ f (fix f a) : A
+
+
+on the output?
+
+commuting conv?
