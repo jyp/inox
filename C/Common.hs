@@ -41,7 +41,7 @@ x <+> y = x <> " " <> y
 commas [] = ""
 commas xs = foldr1 (\x y -> x <> ", " <> y) xs
 parens x = "(" <> x <> ")"
-braces x = "{" <> x <> "}"
+braces x = "{\n" <> x <> "}"
 pair x y = parens $ x <> "," <> y
 
 data C = Code {cCode :: String, cOccs :: [(String,Type)], cDecls :: [String], cDefs :: [String], cStructs ::  [(String,C)]}
@@ -73,9 +73,10 @@ cStructDef name body = Code ("struct " <> n) [] [] [] [(n,stmt ("struct " <> lit
   where n = quoteVar name
 
 
+instance Semigroup C where
+  (Code c1 v1 d1 f1 s1) <> (Code c2 v2 d2 f2 s2) = Code (c1 <> c2) (v1 <> (v2 \\\ d1)) (d1 <> d2) (f1 <> f2) (s1 <> s2)
 instance Monoid C where
   mempty = Code mempty mempty mempty mempty mempty
-  mappend (Code c1 v1 d1 f1 s1) (Code c2 v2 d2 f2 s2) = Code (c1 <> c2) (v1 <> (v2 \\\ d1)) (d1 <> d2) (f1 <> f2) (s1 <> s2)
 
 quoteVar :: String -> String
 quoteVar = concatMap quoteChar
@@ -96,4 +97,5 @@ cleanStructs :: [(String,C)] -> [C]
 cleanStructs = map snd . nubBy ((==) `on` fst) . reverse
 
 
+cCall :: (Semigroup a, IsString a) => a -> [a] -> a
 cCall x args = x <> parens (commas args)

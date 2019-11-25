@@ -23,25 +23,32 @@ import Data.List
 import Data.Function
 import C.Common
 
-
+-- | Declare a variable of the appropriate type
+cDecl :: (String, Type) -> C
 cDecl (n,t) = cDecl' t (Just n)
+
+-- | Declare a variable of the dual type
+coDecl :: (String, Type) -> C
 coDecl (n,t) = cDecl' (dual t) (Just n)
 
+-- | Structure fields
 cStruct :: [(String,Type)] -> C
-cStruct fields = (mconcat [cDecl (f,t) <> ";\n" | (f,t) <- fields])
+cStruct fields = mconcat [cDecl (f,t) <> ";\n" | (f,t) <- fields]
 
+-- | Unique name for a type
 cTypeName :: Type -> String
 cTypeName (t :* u) = "p" <> cTypeName t <> "_" <> cTypeName u
 cTypeName (I) = "i"
 cTypeName (Var x) = "v" <> x
 cTypeName (Perp t) = "n" <> cTypeName t
 
-cName ∷ Maybe String → C
+cName :: Maybe String → C
 cName (Just x) = dcl x
 cName Nothing = ""
 
-cFun :: String -> C -> Type -> Maybe String -> C
-cFun n env t arg = "void " <> lit n <> "(" <> cDecl' t arg <> "," <> env <> ")"
+-- Function signature
+cSig :: String -> C -> Type -> Maybe String -> C
+cSig n env t arg = "void " <> lit n <> "(" <> cDecl' t arg <> "," <> env <> ")"
 
 cDecl' :: Type -> Maybe String -> C
 cDecl' t0 n = case t0 of
@@ -49,29 +56,30 @@ cDecl' t0 n = case t0 of
     I -> cStructDef (cTypeName t0) (cStruct []) <+> cName n
     (Var x) -> lit x <> " " <> cName n
     (Perp t) -> cStructDef (cTypeName t0)
-                  (cFun "(*code)" "char*" t Nothing <> ";\n" <>
+                  (cSig "(*code)" "char*" t Nothing <> ";\n" <>
                    "char env[0];") <> "*" <+> cName n
 
 
--- | Compile a focused, polarised logic into C.
-compileC ∷ LL (String, Type) (String, Type) → C
+-- | Compile a focused, polarised logic to C.
+compileC :: LL (String, Type) (String, Type) → C
 compileC t0 = case t0 of
   Tensor z x y t' ->
     cDecl x <> " = " <> var z <> ".fst;\n" <>
     cDecl y <> " = " <> var z <> ".snd;\n" <>
     compileC t'
-  One _ t' -> "NOP();\n" <> compileC t'
-  Zero x -> "ABORT(" <> var x <> ");\n"
+  One _ t' -> stmt "NOP()" <> compileC t'
+  Zero x -> stmt ("ABORT(" <> var x <> ")")
   Ax x y -> stmt (coDecl x <> "=" <> var y)
 
-  Down z (x,_) t' ->
-    cocompileC t' <>
-    var z <> "->code" <> parens (commas [lit (quoteVar x),var z <> "->env"]) <> ";\n"
+  Down z x'@(x,_) t' ->
+    stmt (coDecl x') <>
+    cocompileC t' (lit (quoteVar x)) <>
+    stmt (var z <> "->code" <> parens (commas [lit (quoteVar x),var z <> "->env"]))
 
 
   Bang z x t' ->
-    stmt (cCall "BOX_DEREF" [var z]) <>
     stmt (cDecl x <> " = " <> cCall "BOX_CONTENTS" [var z]) <>
+    stmt (cCall "BOX_DEREF" [var z]) <>
     compileC t'
 
   Contract z x y t' ->
@@ -85,36 +93,37 @@ compileC t0 = case t0 of
     compileC t'
 
 -- | Compiling negatives, by construction of the eliminated variable.
-cocompileC :: LL (String, Type) (String, Type) → C
-cocompileC t0 = case t0 of
-  Ax x y -> stmt (coDecl x <> "=" <> var y)
-  Par z x t' y u' ->
-    cocompileC t' <>
-    cocompileC u' <>
-    coDecl z <> " = " <> braces (".fst = " <> var x <> ",\n.snd = " <> var y) <> ";\n"
-  Bot z -> stmt (cDecl z <> " = {}")
-  Up z x@(xn,t) t' ->
-     def (cFun xfun (envStruct <> "* env") t (Just xn) <>
-          braces (mconcat [stmt (cDecl v <> "= env->" <> var v) | v <- env'] <>
-                  -- cCall "free(CLOSURE_OF(env))"
-                  t'c )) <> -- FIXME: hoist to the top level.
-     stmt (coDecl z <> " = " <> cCall "malloc" ["4 /* fixme */+" <>  cCall "sizeof" [envStruct]]) <>
-     stmt (envStruct <> " *" <> cXenv <> " = " <> var z <> "-> env") <>
-     mconcat [stmt $ cXenv <> "->" <> v <> " = " <> v | v <- map var env'] <>
-     stmt (var z <> "->code = " <> lit xfun) -- fixme: add a cast
-     -- stmt (cCall "memcpy" [var z <> "->env ","&" <> cXenv,cCall "sizeof" [cXenv]])
+cocompileC :: LL (String, Type) (String, Type) -> C → C
+cocompileC t0 target = case t0 of
+  Ax _x y -> stmt (target <> "=" <> var y)
+  Par _z _x t' _y u' ->
+    cocompileC t' (target <> ".fst") <>
+    cocompileC u' (target <> ".snd")
+  Bot _z -> mempty
+  Up _z _x@(xn,t) t' ->
+     def (cSig xfun (envStruct <> "* env") t (Just xn) <>
+          braces (mconcat [stmt (cDecl v <> "= env->" <> var v) | v <- env'] <> -- load env in local vars
+                  stmt (cCall "free" ["CLOSURE_OF(env)"]) <> -- free env
+                  t'c )) <>
+     stmt (target <> " = " <> cCall "malloc" ["4 /* fixme */+" <>  cCall "sizeof" [envStruct]]) <>
+     stmt (envStruct <> " *" <> cXenv <> " = " <> target <> "-> env") <>
+     mconcat [stmt $ cXenv <> "->" <> v <> " = " <> v | v <- map var env'] <> -- fill each env field
+     stmt (target <> "->code = " <> lit xfun) -- fixme: add a cast
     where xenv = (xn ++ "_env")
           xfun = quoteVar $ fresh xn "fun"
           t'c@(Code _ env _ _ _) = compileC t'
           env' = nubBy ((==) `on` fst) (env \\\ [xn])
           envStruct = cStructDef (cEnvName env') (cStruct env')
           cXenv = lit (quoteVar xenv)
+  Quest _ _ t' ->
+    stmt (target <> " = BOX_ALLOCATE()") <>
+    cocompileC t' ("*" <> target)
 
 cEnvName :: [(String,Type)] -> String
 cEnvName env = "e" <> mconcat ["f_" <> f <> "_" <> cTypeName t | (f,t) <- env]
 
 
-compile ∷ ([(String, Type)], LL String String) → String
+compile :: ([(String, Type)], LL String String) → String
 compile (ctx,input) = cCode $
   "#include \"cd.h\"\n" <>
   mconcat (cleanStructs (cStructs cctx <> cStructs t'c)) <>
@@ -124,5 +133,7 @@ compile (ctx,input) = cCode $
                   t' = (normalize ctx input)
                   cctx = commas [cDecl x | x <- ctx]
 
-main ∷ IO ()
+main :: IO ()
 main = writeFile "simp.c" $ compile simpl
+
+-- >>> main

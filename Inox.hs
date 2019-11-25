@@ -11,6 +11,7 @@ import Text.PrettyPrint.Compact hiding (Dual)
 -- import Text.PrettyPrint.Compact.Core
 import Data.String (IsString(..))
 
+type DOC = Doc ()
 data PositiveType
     = PositiveType :*: PositiveType
     | One
@@ -30,7 +31,7 @@ data Value -- positive terms
     | Id Variable
 
 class Pretty x where
-  pretty :: x -> Doc
+  pretty :: x -> DOC
 
 instance Pretty Variable where
   pretty (Variable x) = text x

@@ -19,7 +19,7 @@ Bnf/%/Par.y: Bnf/Abs%.hs
 	happy $?
 
 all: $(BNFCFILES)
-	stack build
+	cabal new-build
 
 .PHONY: all NOARG
 .NOARG: all

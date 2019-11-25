@@ -9,7 +9,7 @@ Consider a (linear) function
 
 f : A ⊸ B ⊸ C
 
-The type is encoded as:
+Its type is encoded as:
 
 (~A ⅋ (~B ⅋ C))
 
@@ -29,15 +29,17 @@ C.
 Thus by doing the encoding steps ILL -> CLL -> focused CLL one
 optimises calls of curried functions.
 
+
 * Structure of closures
 
-The structure of a closure is a pair of
-- a pointer to code
-- an environment
+The structure of a closure of type ~B is a pair of
+- a pointer to code, expecting B ⊗ A as argument
+- an environment of type A
 
 
-Note that, when compiling first-order code (e.g. A Pascal-like or C-like
-language), functions will have a single negative argument, like so:
+Note that, when compiling first-order code (e.g. A Pascal-like or
+C-like language), functions will have a single negative argument for
+the result, like so:
 
 f : Param ⊸ (Result ⊸ ⊥) ⊸ ⊥
 
@@ -45,7 +47,7 @@ Let us examine a call to f:
 
 
 x <- something
-res <- f(arg)
+res <- f(x)
 y <- doSomething(x,res)
 return y
 
@@ -69,6 +71,8 @@ In this case the 'call stack' has the familiar structure:
 
 etc.
 
+* List
+
 * Types of closures
 
 Note that the type of the environment is fully determined by the
@@ -90,17 +94,44 @@ closures without storing any further data.
 * Polymorphism
 
 - As far as possible I'd like to avoid useless boxing of data
-- (If boxing is required we can always use exponentials, or a special
-  operator (§))
+- (If boxing is desirable for whatever reason we can always use
+  exponentials, or a special operator (§))
 - This means that polymorphic values should be copied (and boxed) around as other
   (primitive) types
 - Thus types will have a runtime representation, allowing for the copy
   and (boxing) to be performed correctly.
 - One needs to be able to pass around (and store) values whose size is dynamic
 
+* Representation of types
+
+- Variable-length types:
+  vl : Type -> Bool
+
+  vl(!A) = False
+  vl(∃α. A) = True
+  vl(A ⊸ ⊥) = True
+  vl(A ⊗ B) = vl(A) or vl(B)
+  vl(A ⊕ B) = vl(A) or vl(B) or len(A) /= len(B)
+  vl(1) = False
+  vl(0) = False
+
+- representation re : Type -> Layout
+  re(!A) = reference counted pointer to re(A)
+  re(∃α. A) = TypeRep (α) <> re(A)
+  re(A ⊸ ⊥) = pointer to code <> re(Env)
+  re(A ⊗ B) = pointer to re(A) <> re(B) if vl(A)
+  re(A ⊗ B) = re(A) <> re(B) otherwise
+  re(A ⊕ B) = tag <> max(re(A), re(B))
+
+
+* Example: List-array
+
+LA α = α ⊕ 
+
+
 * LLVM
 
 - musttail call
 - variable length arguments can be passed with the inalloca attribute (check also doc of musttail)
   http://llvm.org/docs/InAlloca.html
-- Prefix Data allows to store closure runtime type info easily and efficiently
+- Prefix Data enable storage of closure runtime type info easily and efficiently
