@@ -38,6 +38,7 @@ cStruct fields = mconcat [cDecl (f,t) <> ";\n" | (f,t) <- fields]
 -- | Unique name for a type
 cTypeName :: Type -> String
 cTypeName (t :* u) = "p" <> cTypeName t <> "_" <> cTypeName u
+cTypeName (t :+ u) = "s" <> cTypeName t <> "_" <> cTypeName u
 cTypeName (I) = "i"
 cTypeName (Var x) = "v" <> x
 cTypeName (Perp t) = "n" <> cTypeName t
@@ -53,6 +54,10 @@ cSig n env t arg = "void " <> lit n <> "(" <> cDecl' t arg <> "," <> env <> ")"
 cDecl' :: Type -> Maybe String -> C
 cDecl' t0 n = case t0 of
     (t :* u) -> cStructDef (cTypeName t0) (cStruct [("fst",t),("snd",u)]) <+> cName n
+    (t :+ u) -> cStructDef (cTypeName t0)
+                 ("char tag;\n" <>
+                  "union " <> braces
+                   (cStruct [("left",t),("right",u)]) <+> "val") <+> cName n
     I -> cStructDef (cTypeName t0) (cStruct []) <+> cName n
     (Var x) -> lit x <> " " <> cName n
     (Perp t) -> cStructDef (cTypeName t0)
@@ -63,6 +68,14 @@ cDecl' t0 n = case t0 of
 -- | Compile a focused, polarised logic to C.
 compileC :: LL (String, Type) (String, Type) → C
 compileC t0 = case t0 of
+  Plus z x t y u ->
+    "if (" <> var z <> "tag) {\n" <>
+       stmt (cDecl x <> " = " <> var z <> ".val.left") <>
+       compileC t <>
+    "} else {" <>
+       stmt (cDecl y <> " = " <> var z <> ".val.right") <>
+       compileC u <>
+    "};"
   Tensor z x y t' ->
     cDecl x <> " = " <> var z <> ".fst;\n" <>
     cDecl y <> " = " <> var z <> ".snd;\n" <>
@@ -96,6 +109,9 @@ compileC t0 = case t0 of
 cocompileC :: LL (String, Type) (String, Type) -> C → C
 cocompileC t0 target = case t0 of
   Ax _x y -> stmt (target <> "=" <> var y)
+  With pol _z _x t ->
+    stmt (target <> ".tag = " <> (if pol then "1" else "0")) <>
+    cocompileC t (target <> ".val." <> (if pol then "left" else "right"))
   Par _z _x t' _y u' ->
     cocompileC t' (target <> ".fst") <>
     cocompileC u' (target <> ".snd")
