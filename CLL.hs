@@ -58,15 +58,15 @@ dual (Perp x) = x
 dual x = Perp x
 
 pattern Dual x <- (dual -> x)
-pattern x :| y <- Perp (Dual x :* Dual y)
-pattern x :& y <- Perp (Dual x :+ Dual y)
+  where Dual x = dual x
+pattern x :| y = Perp (Dual x :* Dual y)
+pattern x :& y = Perp (Dual x :+ Dual y)
 pattern T = Perp O
 pattern B = Perp I
 pattern All t <- Perp (Ex ((dual .) -> t)) -- ?FIXME? Dualise the arg?
-pattern WhyNot t <- Perp (OfCourse (Dual t))
+pattern WhyNot t = Perp (OfCourse (Dual t))
+pattern Sure t = (OfCourse (Dual t))
 
-par :: Type -> Type -> Type
-par x y = Perp (dual x :* dual y)
 
 ------------------------------------------------
 -- Terms
@@ -262,15 +262,15 @@ normalize ctx = coeval [(n, (toVal n t,t)) | (n,t) <- ctx]
 trivial, foc, simpl :: n ~ String => ([(n,Type)],LL n n)
 trivial = ([("x",Var "A"),("y",Perp (Var "A"))], Ax "x" "y")
 
-simpl = ([("xy",Perp (Var "A") `par` Var "B")
+simpl = ([("xy",Perp (Var "A") :| Var "B")
          ,("x'",Var "A")
          ,("y'",Perp (Var "B"))]
          ,Par "xy" "x" (Ax "x" "x'") "y" (Ax "y" "y'"))
 
-foc = ([("aPbPc",Var "a" `par` (Var "b" `par` Var "c"))
+foc = ([("aPbPc",Var "a" :| (Var "b" :| Var "c"))
        ,("a'",Perp (Var "a"))
        ,("x'",Perp (Var "x"))
-       ,("xPb'Tc'",(Var "x") `par` (Perp (Var "b") :* Perp (Var "c")))],
+       ,("xPb'Tc'",(Var "x") :| (Perp (Var "b") :* Perp (Var "c")))],
        Par "aPbPc"
        "a" (Ax "a" "a'")
        "bPc" (Par "xPb'Tc'"
